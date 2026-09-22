@@ -1,0 +1,32 @@
+# ── Kredensial — JANGAN PERNAH di-push ke GitHub ─────────────────────────────
+service-account.json
+raspi/service-account.json
+files/service-account.json
+kalibrasi_kamera.json
+*.key
+
+# ── Data besar: video mentah & hasil (dibuat ulang / diunduh terpisah) ───────
+data/
+dataset1/
+output/
+videos/
+*.MOV
+*.mp4
+*.avi
+*.mkv
+
+# Dataset foto lapangan (besar, simpan di Google Drive/Cloud terpisah)
+*.jpg
+*.png
+!docs/**/*.png
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.ipynb_checkpoints/
+
+# ── Sistem ───────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

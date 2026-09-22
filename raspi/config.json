@@ -1,0 +1,17 @@
+{
+  "device_id": "pi-bed-01",
+  "video_source": 0,
+  "max_width": 960,
+  "interval_menit": 10,
+  "kamera_warmup": 5,
+  "bed_lost_max": 3,
+  "suhu_maks_c": 75.0,
+  "outbox_dir": "outbox",
+  "firebase": {
+    "service_account": "service-account.json",
+    "collection": "bed_readings",
+    "storage_bucket": "NAMA-PROYEK-FIREBASE.appspot.com",
+    "storage_prefix": "snapshots"
+  },
+  "catatan": "video_source: 0 = kamera Pi; atau path file video untuk uji. interval_menit: jeda antar capture (hemat panas). Jika suhu SoC > suhu_maks_c, capture ditunda otomatis."
+}

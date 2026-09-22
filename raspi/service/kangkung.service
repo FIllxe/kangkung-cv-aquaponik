@@ -1,0 +1,16 @@
+[Unit]
+Description=Kangkung Aquaponik Live Monitor (Pi -> Firebase)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/kangkung_pi
+ExecStart=/home/pi/kangkung_pi/venv/bin/python kangkung_pi.py
+Restart=always
+RestartSec=15
+User=pi
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
