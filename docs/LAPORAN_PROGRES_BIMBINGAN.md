@@ -33,6 +33,8 @@ ground truth, validasi ambang, dan finalisasi laporan.
 | 6 | Notebook presentasi 16 cell, semua tereksekusi | `notebooks\presentasi_kangkung_cv.ipynb` |
 | 7 | Tinjauan pustaka: **47 paper terverifikasi** (OpenAlex), termasuk Canny 1986 (29.443 sitasi) & Woebbecke 1995 (1.543) | `files paper\REFERENSI_METHOD_BARU.md` |
 | 8 | Kontrak skema dashboard Firebase (mengikuti dashboard yang sudah ada) | `docs\SKEMA_FIREBASE_BED_READINGS.md` + payload contoh siap upload |
+| 9 | **Deteksi kesehatan daun per zona** — kuning/klorosis (H 21–34) & coklat/nekrosis (H 8–20 + adjacency kanopi 21×21), ambang 10/25% & 3/8% | `files\kangkung_cv.py`; uji positif: `output\evaluasi\uji_kuning_coklat.jpg` |
+| 10 | **Panel demo kesehatan daun (before/after)** — blob kuning 58%K & coklat 20,5%C terdeteksi `sakit` tepat di zona injeksi; zona kanopi <30% otomatis `n/a`; heatmap 4×6 deteksi = target 100% | `files\panel_kesehatan_daun.py` → `output\evaluasi\panel_kesehatan_daun.png` |
 
 ## 3. Yang Sedang / Akan Dikerjakan 🔄
 
@@ -53,6 +55,8 @@ ground truth, validasi ambang, dan finalisasi laporan.
 1. **30 detik** `output\demo\IMG_5159_beranotasi.mp4` — quad bed + grid berwarna + HUD coverage.
 2. `output\demo\demo_dua_video.png` — perbandingan dua bed (49,6% vs 58,4%; distribusi status).
 3. Notebook §5 — HSV statis vs adaptif pada 3 kondisi cahaya + grafik jitter EMA.
+4. `output\evaluasi\panel_kesehatan_daun.png` — demo deteksi kesehatan daun: bed asli →
+   injeksi blob kuning/coklat → zona sakit terdeteksi otomatis + heatmap validasi 24 zona.
 
 ## 5. Pertanyaan — Mohon Arahan
 
@@ -67,7 +71,7 @@ ground truth, validasi ambang, dan finalisasi laporan.
 |---|---|
 | "Akurasi berapa?" | Tool evaluasi sudah siap (P/R/F1/IoU + pembanding 2 metode lain); mask GT sedang dikerjakan, angka final akhir Sep. Yang sudah terukur: jitter −53%, coverage konsisten antar video. |
 | "Kenapa bukan deep learning?" | Dataset anotasi kecil (7 foto + video); target deploy ringan (RPi tanpa GPU); HSV+kontur ~20–25 ms/frame di CPU. DL dicantumkan sebagai pengembangan lanjutan. |
-| "Output-nya apa untuk petani?" | Peta status 24 zona (belum/hampir/siap/harus panen) + rekomendasi teks + timeseries; siap dikirim ke dashboard web (skema Firebase sudah disepakati). |
+| "Output-nya apa untuk petani?" | Peta status 24 zona (belum/hampir/siap/harus panen) **+ status kesehatan daun per zona (sehat/waspada/sakit karena kuning/coklat)** + rekomendasi teks + timeseries; siap dikirim ke dashboard web (skema Firebase sudah disepakati). |
 | "Kapan selesai?" | Target akhir November. Coding inti selesai; sisa evaluasi + validasi + laporan (timeline di §3). |
 
 ## 7. Checklist H-1 Bimbingan
