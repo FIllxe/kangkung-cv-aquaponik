@@ -1,6 +1,9 @@
 {
   "device_id": "pi-bed-01",
-  "video_source": 0,
+  "video_source": "csi",
+  "csi_width": 1296,
+  "csi_height": 972,
+  "csi_warmup_detik": 2.0,
   "max_width": 960,
   "interval_menit": 10,
   "kamera_warmup": 5,
@@ -13,5 +16,5 @@
     "storage_bucket": "NAMA-PROYEK-FIREBASE.appspot.com",
     "storage_prefix": "snapshots"
   },
-  "catatan": "video_source: 0 = kamera Pi; atau path file video untuk uji. interval_menit: jeda antar capture (hemat panas). Jika suhu SoC > suhu_maks_c, capture ditunda otomatis."
+  "catatan": "video_source: 'csi' = kamera CSI Pi (via libcamera/Picamera2, karena OpenCV tidak bisa baca /dev/video0 di kernel baru); 0 = webcam/USB V4L2; atau path file video untuk uji. csi_width/csi_height = resolusi capture CSI (1296x972 = mode native ov5647). csi_warmup_detik = jeda AE/AWB. interval_menit: jeda antar capture (hemat panas). Jika suhu SoC > suhu_maks_c, capture ditunda otomatis."
 }

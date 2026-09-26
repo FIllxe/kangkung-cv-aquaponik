@@ -73,37 +73,55 @@ Output untuk Bab 4 (di `files/output/`):
 
 # Checklist Deploy Raspberry Pi
 
-Referensi lengkap: `raspi/README.md` (setup 15 menit + burn-in test 24 jam).
+Referensi lengkap: `raspi/README.md` (kebutuhan hardware, setup, kamera CSI/IR,
+Tailscale, troubleshooting, burn-in 24 jam).
 
-## Pra-deploy (di laptop — 2 field tersisa)
+## A. Pra-deploy di laptop
 
-`raspi/config.json` sudah terisi; tinggal:
+- [ ] `raspi/config.json` → `firebase.storage_bucket`: ganti
+      `NAMA-PROYEK-FIREBASE.appspot.com` dengan bucket asli
+      (Firebase Console → Storage → tab *Files*; format
+      `nama-proyek.firebasestorage.app` atau `….appspot.com`).
+- [ ] `raspi/config.json` → `device_id` unik per bed (mis. `pi-bed-01`).
+- [ ] `raspi/config.json` → `video_source`: `"csi"` untuk kamera CSI (ov5647),
+      `0` untuk webcam USB, atau path file video untuk uji offline.
+- [ ] Kredensial `service-account.json` (Firebase Console → Project settings →
+      Service accounts → *Generate new private key*). File ini **tidak**
+      di-commit (sudah ada di `.gitignore`).
 
-- [ ] `firebase.storage_bucket`: ganti `NAMA-PROYEK-FIREBASE.appspot.com`
-      dengan bucket asli (Firebase Console → Storage → tab *Files*,
-      format `nama-proyek.firebasestorage.app` atau `….appspot.com`).
-- [ ] Letakkan kredensial di `raspi/service-account.json` (saat ini baru
-      `service-account.json.EXAMPLE`). Firebase Console → Project settings →
-      Service accounts → *Generate new private key* → simpan.
-- [ ] Pastikan keduanya **tidak ter-push**: keduanya sudah di `.gitignore` —
-      jangan pindahkan/commit file aslinya.
+## B. Deploy di Pi
 
-## Deploy di Pi
+```bash
+# 1) kirim paket — pilih salah satu
+git clone https://github.com/FIllxe/kangkung-cv-aquaponik.git ~/kangkung_pi_src   # di Pi
+scp -r raspi aquaponic@<ip-pi>:~/kangkung_pi                                      # dari laptop
 
-```
-git clone https://github.com/FIllxe/kangkung-cv-aquaponik.git ~/kangkung_pi_src
-cd ~/kangkung_pi_src/raspi && bash install.sh      # salin paket → ~/kangkung_pi
+# 2) install: venv --system-site-packages + picamera2/libcamera + systemd
+cd ~/kangkung_pi_src/raspi && bash install.sh     # atau: cd ~/kangkung_pi && bash install.sh
+
+# 3) konfigurasi + kredensial
+nano ~/kangkung_pi/config.json        # storage_bucket, device_id, video_source
+scp service-account.json aquaponic@<ip-pi>:~/kangkung_pi/     # jalankan dari laptop
+
+# 4) verifikasi kamera & pipeline (di Pi)
 cd ~/kangkung_pi
-nano config.json                                   # isi storage_bucket di Pi juga
-cp /path/service-account.json .                    # taruh kredensial di Pi
-./venv/bin/python kangkung_pi.py --test            # 1 siklus → outbox/sent/
+./venv/bin/python camera_pi.py            # 1 frame → /tmp/camera_pi_test.jpg
+./venv/bin/python kangkung_pi.py --test   # harus muncul [OK] ... cov=..%
+
+# 5) jalankan service
 sudo systemctl start kangkung && journalctl -u kangkung -f
 ```
 
-## Burn-in 24 jam (kriteria lulus — ringkas dari `raspi/README.md`)
+- [ ] Kamera terdeteksi: `rpicam-hello --list-cameras` menampilkan `ov5647`.
+- [ ] Kamera fokus & seluruh tepi bed masuk frame (bila `[WARN] bed tidak
+      terdeteksi` → § Troubleshooting `raspi/README.md`).
+- [ ] Remote admin siap: `tailscale status` (Pi & laptop online) dan
+      `ssh aquaponic@<nama-pi>` bisa tanpa password.
+
+## C. Burn-in 24 jam (kriteria lulus — ringkas dari `raspi/README.md`)
 
 - [ ] Dokumen baru tiap ±10 menit di Firestore; ≥ 140 siklus `[OK]` / 24 jam
-- [ ] `suhu_pi_c` < 70°C (75°C sering → heatsink/ventilasi)
+- [ ] `suhu_pi_c` < 70 °C (75 °C sering → heatsink/ventilasi)
 - [ ] Snapshot di dashboard terbaca (grid 4×6 tidak hitam/penuh putih)
 - [ ] `outbox/` (bukan `outbox/sent/`) hampir kosong; cabut WiFi 15 menit →
       antrean terkirim setelah online

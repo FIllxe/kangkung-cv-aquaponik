@@ -1,0 +1,165 @@
+/* Dashboard Monitor Kangkung Live — tema gelap mengikuti palet skrip Python
+   (#1a1a2e / #16213e) dan warna status dari files/kangkung_cv.py WARNA_STATUS. */
+
+:root {
+  --bg: #1a1a2e;
+  --bg-soft: #16213e;
+  --card: #1f2547;
+  --line: #2c3560;
+  --text: #eef1ff;
+  --muted: #9aa4cf;
+  --belum: #3498db;
+  --hampir: #f39c12;
+  --siap: #2ecc71;
+  --harus: #e74c3c;
+  --na: #8c8c8c;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 18px 40px;
+  background: radial-gradient(1200px 600px at 15% -10%, #23305c 0%, var(--bg) 55%);
+  color: var(--text);
+  font: 15px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+}
+
+h1 { font-size: 1.35rem; margin: 0; }
+h2 { font-size: .95rem; margin: 0 0 10px; letter-spacing: .02em; }
+h2 .muted { font-weight: 400; font-size: .8rem; }
+code { background: #0f1730; padding: 1px 5px; border-radius: 5px; font-size: .85em; }
+.muted { color: var(--muted); font-size: .85rem; }
+.hidden { display: none !important; }
+
+/* ── Topbar ─────────────────────────────────────────────────────────────── */
+.topbar {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  align-items: center; justify-content: space-between;
+  padding: 18px 0 14px;
+  max-width: 1320px; margin: 0 auto;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-ico { font-size: 1.9rem; }
+.statusbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.badge {
+  display: inline-block; padding: 4px 11px; border-radius: 999px;
+  font-size: .72rem; font-weight: 700; letter-spacing: .08em;
+}
+.badge-live  { background: rgba(46, 204, 113, .16); color: var(--siap); border: 1px solid var(--siap); }
+.badge-wait  { background: rgba(243, 156, 18, .14); color: var(--hampir); border: 1px solid var(--hampir); }
+.badge-error { background: rgba(231, 76, 60, .16);  color: var(--harus);  border: 1px solid var(--harus); }
+.badge-demo  { background: rgba(52, 152, 219, .16); color: var(--belum);  border: 1px solid var(--belum); }
+
+.btn {
+  background: #26305c; color: var(--text); border: 1px solid var(--line);
+  padding: 7px 14px; border-radius: 9px; cursor: pointer; font-size: .85rem;
+}
+.btn:hover { background: #2f3b71; }
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+main { max-width: 1320px; margin: 0 auto; }
+.notice {
+  background: rgba(243, 156, 18, .12); border: 1px solid var(--hampir);
+  color: #ffddb0; padding: 10px 14px; border-radius: 10px; font-size: .88rem;
+}
+.cards {
+  display: grid; gap: 14px; margin-bottom: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+.grid-2 {
+  display: grid; gap: 14px; margin-bottom: 14px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+}
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.card {
+  background: linear-gradient(180deg, var(--card) 0%, var(--bg-soft) 100%);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 15px 16px;
+}
+.stat-value { font-size: 1.85rem; font-weight: 700; margin: 0 0 2px; }
+.stat-value .unit { font-size: .95rem; font-weight: 500; color: var(--muted); margin-left: 4px; }
+.stat p { margin: 0; }
+
+/* ── Heatmap zona ───────────────────────────────────────────────────────── */
+.heatmap {
+  display: grid; grid-template-columns: repeat(6, 1fr);
+  gap: 7px; margin-bottom: 12px;
+}
+@media (max-width: 560px) { .heatmap { grid-template-columns: repeat(4, 1fr); } }
+
+.tile {
+  position: relative; border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 6px 7px; cursor: pointer; color: #06210f;
+  font: inherit; text-align: center; transition: transform .08s ease;
+}
+.tile:hover { transform: translateY(-2px); }
+.tile:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.tile-id { display: block; font-size: .68rem; font-weight: 700; opacity: .8; }
+.tile-cov { display: block; font-size: 1.05rem; font-weight: 700; }
+.tile-kes {
+  position: absolute; top: 5px; right: 6px;
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, .35);
+}
+.tile.active { outline: 2px solid #fff; outline-offset: 2px; }
+.tile.empty { background: #202748; color: var(--muted); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: .78rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+.zone-detail {
+  margin-top: 12px; padding: 11px 13px; background: #131a36;
+  border: 1px solid var(--line); border-radius: 10px; font-size: .86rem;
+}
+.zone-detail b { color: #fff; }
+.zone-detail .kv { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 8px; }
+
+/* ── Snapshot & chart ──────────────────────────────────────────────────── */
+.snap-wrap { margin: 0 0 16px; }
+.snapshot { width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; }
+.chart-wrap { position: relative; }
+#chart {
+  width: 100%; background: #131a36; border: 1px solid var(--line);
+  border-radius: 10px; display: block;
+}
+.chart-tip {
+  position: absolute; pointer-events: none; background: #0b1128;
+  border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px;
+  font-size: .76rem; white-space: nowrap; transform: translate(-50%, -120%);
+}
+
+/* ── Distribusi & fuzzy ────────────────────────────────────────────────── */
+.dist { display: grid; gap: 7px; margin-bottom: 16px; }
+.dist-row {
+  display: grid; grid-template-columns: 104px 1fr 46px;
+  gap: 10px; align-items: center; font-size: .82rem;
+}
+.dist-bar { height: 9px; background: #0f1730; border-radius: 999px; overflow: hidden; }
+.dist-bar > i { display: block; height: 100%; }
+.dist-val { text-align: right; color: var(--muted); }
+
+.reko {
+  background: #131a36; border-left: 3px solid var(--siap);
+  padding: 10px 13px; border-radius: 8px; margin: 0 0 12px; font-size: .88rem;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 16px; }
+.chip {
+  background: #131a36; border: 1px solid var(--line); border-radius: 999px;
+  padding: 6px 12px; font-size: .79rem;
+}
+.chip b { color: #fff; }
+
+.alerts { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.alerts li {
+  background: #131a36; border: 1px solid var(--line); border-left-width: 3px;
+  border-radius: 8px; padding: 8px 11px; font-size: .82rem;
+}
+
+.foot { max-width: 1320px; margin: 22px auto 0; padding-top: 14px; border-top: 1px solid var(--line); }
+

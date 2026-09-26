@@ -26,6 +26,7 @@ from adaptive_bed import (deteksi_sudut_bed, CornerSmoother, matriks_warp,
 from kangkung_cv import get_status, get_kesehatan, BED_CONFIG
 from fuzzy_export import hitung_fuzzy
 from thermal_guard import dalam_batas
+import camera_pi
 import firebase_uplink
 
 
@@ -45,26 +46,41 @@ def doc_id(device_id, dt):
     return f"{device_id}_{dt.strftime('%Y%m%dT%H%M%S')}"
 
 
+CSI_SOURCE = ("csi", "picamera2", "libcamera")
+
+
 def ambil_frame(cfg):
-    """Baca 1 frame dari kamera/video (dengan warmup). None bila gagal."""
+    """Baca 1 frame dari kamera/video (dengan warmup). None bila gagal.
+
+    video_source "csi" -> kamera CSI lewat libcamera (lihat camera_pi.py),
+    angka/path lain -> cv2.VideoCapture seperti biasa.
+    """
     src = cfg["video_source"]
-    cap = cv2.VideoCapture(src)
-    if not cap.isOpened():
-        return None
-    try:
-        for _ in range(cfg.get("kamera_warmup", 5)):
-            cap.read()
-        ok, frame = cap.read()
-        if not ok:
+    if isinstance(src, str) and src.lower() in CSI_SOURCE:
+        try:
+            frame = camera_pi.ambil_frame_csi(cfg)
+        except Exception as e:
+            print(f"[WARN] kamera CSI gagal: {e}")
             return None
-        frame = resize_frame(frame)
-        mw = cfg.get("max_width", 960)
-        if frame.shape[1] > mw:
-            s = mw / frame.shape[1]
-            frame = cv2.resize(frame, (mw, int(frame.shape[0] * s)))
-        return frame
-    finally:
-        cap.release()
+    else:
+        cap = cv2.VideoCapture(src)
+        if not cap.isOpened():
+            return None
+        try:
+            for _ in range(cfg.get("kamera_warmup", 5)):
+                cap.read()
+            ok, frame = cap.read()
+            if not ok:
+                return None
+        finally:
+            cap.release()
+
+    frame = resize_frame(frame)
+    mw = cfg.get("max_width", 960)
+    if frame.shape[1] > mw:
+        s = mw / frame.shape[1]
+        frame = cv2.resize(frame, (mw, int(frame.shape[0] * s)))
+    return frame
 
 
 def analisis(frame, smoother):

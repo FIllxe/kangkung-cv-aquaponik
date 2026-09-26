@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monitor Kangkung Live — Dashboard Aquaponik</title>
+  <meta name="description" content="Dashboard live monitoring kesiapan panen kangkung (grid 4x6) dari Raspberry Pi via Firebase.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-ico" aria-hidden="true">🌿</span>
+      <div>
+        <h1>Monitor Kangkung Live</h1>
+        <p id="deviceLine" class="muted">memuat identitas perangkat…</p>
+      </div>
+    </div>
+    <div class="statusbar">
+      <span id="connBadge" class="badge badge-wait">MENUNGGU</span>
+      <span id="lastUpdate" class="muted">—</span>
+      <button id="demoBtn" class="btn" type="button">Mode demo</button>
+    </div>
+  </header>
+
+  <main>
+    <p id="notice" class="notice hidden" role="status"></p>
+
+    <section class="cards" aria-label="Ringkasan">
+      <article class="card stat">
+        <h2>Coverage rata-rata</h2>
+        <p class="stat-value"><span id="covRata">–</span><span class="unit">%</span></p>
+        <p class="muted" id="covStd">simpangan baku –</p>
+      </article>
+      <article class="card stat">
+        <h2>Zona siap panen</h2>
+        <p class="stat-value"><span id="zonaSiap">–</span><span class="unit">/ 24</span></p>
+        <p class="muted" id="persenSiap">–% dari total zona</p>
+      </article>
+      <article class="card stat">
+        <h2>Indeks stres (PSI)</h2>
+        <p class="stat-value"><span id="indeksSehat">–</span><span class="unit">/ 100</span></p>
+        <p class="muted">0 = sehat · 100 = stres berat (makin tinggi = makin stres)</p>
+        <p class="muted" id="kesRingkas">kuning –% · coklat –%</p>
+      </article>
+      <article class="card stat">
+        <h2>Suhu Raspberry Pi</h2>
+        <p class="stat-value"><span id="suhuPi">–</span><span class="unit">°C</span></p>
+        <p class="muted" id="suhuNote">ambang thermal guard 75 °C</p>
+      </article>
+    </section>
+
+    <section class="grid-2">
+      <article class="card">
+        <h2>Peta zona <span class="muted">(baris × kolom = 4 × 6)</span></h2>
+        <div id="heatmap" class="heatmap" role="group" aria-label="Peta 24 zona"></div>
+        <div id="legendStatus" class="legend"></div>
+        <div id="zoneDetail" class="zone-detail" aria-live="polite">
+          Klik salah satu zona untuk melihat detail.
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>Snapshot terakhir</h2>
+        <figure class="snap-wrap">
+          <img id="snapshot" class="snapshot hidden" alt="Snapshot beranotasi bed kangkung">
+          <figcaption id="snapshotNote" class="muted">Belum ada snapshot.</figcaption>
+        </figure>
+        <h2>Riwayat coverage <span class="muted">(maks 144 pembacaan terakhir)</span></h2>
+        <div class="chart-wrap">
+          <canvas id="chart" height="160" aria-label="Grafik riwayat coverage"></canvas>
+          <div id="chartTip" class="chart-tip hidden"></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid-2">
+      <article class="card">
+        <h2>Distribusi status zona</h2>
+        <div id="distStatus" class="dist"></div>
+        <h2>Kesehatan daun</h2>
+        <div id="distKes" class="dist"></div>
+        <div id="legendKes" class="legend"></div>
+      </article>
+
+      <article class="card">
+        <h2>Rekomendasi &amp; input fuzzy pompa</h2>
+        <p id="rekomendasi" class="reko">—</p>
+        <div id="fuzzy" class="chips"></div>
+        <h2>Zona perlu perhatian</h2>
+        <ul id="alertList" class="alerts"><li class="muted">Belum ada data.</li></ul>
+      </article>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span class="muted">
+      Data dari Raspberry Pi (push tiap ±10 menit) → Firestore
+      <code>bed_readings</code>. Dashboard ini hanya membaca, tidak mengontrol apa pun.
+    </span>
+  </footer>
+
+  <script src="firebase-config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

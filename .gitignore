@@ -2,6 +2,7 @@
 service-account.json
 raspi/service-account.json
 files/service-account.json
+web/firebase-config.js
 kalibrasi_kamera.json
 *.key
 

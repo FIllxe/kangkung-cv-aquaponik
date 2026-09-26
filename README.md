@@ -6,7 +6,18 @@ klorosis, % coklat = nekrosis) — output siap dikonsumsi dashboard Firebase dan
 kontroler fuzzy pompa air.
 
 ![status](https://img.shields.io/badge/status-prototype%20capstone-green)
-![python](https://img.shields.io/badge/python-3.9%2B-blue)
+![python](https://img.shields.io/badge/python-3.10%2B-blue)
+![deploy](https://img.shields.io/badge/deploy-Raspberry%20Pi%204B-c51a4a)
+
+## Status terverifikasi
+
+| Lingkungan | Yang sudah diverifikasi |
+|---|---|
+| Laptop (Windows, Python 3.12) | pipeline video end-to-end, evaluasi, notebook presentasi |
+| Raspberry Pi 4B + Debian 13 *trixie* (aarch64, Python 3.13) | akses remote (SSH + Tailscale), venv Pi (`opencv 4.10.0`, `numpy 1.26.4`, `firebase-admin 6.5.0`), **kamera CSI IR 5MP (ov5647) terbaca lewat libcamera/Picamera2** |
+| Lapangan (outdoor permanen) | ⏳ menunggu kasing/box kamera → uji pipeline penuh + burn-in 24 jam |
+
+Langkah deploy, konfigurasi, dan troubleshooting: [`raspi/README.md`](raspi/README.md).
 
 ## Arsitektur
 
@@ -14,23 +25,26 @@ kontroler fuzzy pompa air.
 Video/Kamera → Deteksi Bed (Canny edge / HSV) → Warp Perspektif → Grid 4×6
 → Segmentasi HSV Adaptif (f = mean(V)/128) → Coverage + Kesehatan per Zona
 → CSV Timeseries + JSON + MP4 Beranotasi → Dashboard Firebase (multi-user)
-                                                    ↘ fuzzy_input → Pompa Air
+                                                    ↘ fuzzy_input (PSI 0-100) → Kontroler Fuzzy
 ```
 
 ## Isi Repo
 
 | Folder | Isi |
 |---|---|
-| `files/` | Pipeline utama: `proses_video.py`, `adaptive_bed.py`, `kangkung_cv.py`, evaluasi, kalibrasi |
-| `raspi/` | Paket **ready-to-use Raspberry Pi** (install.sh, systemd, thermal guard, Firebase uplink) |
-| `notebooks/` | Notebook presentasi (16→19 cell, tereksekusi) |
-| `docs/` | Laporan progres, skema Firebase `bed_readings`, laporan PDF |
-| `files paper/` | 53 referensi paper terverifikasi (OpenAlex) dalam markdown |
+| `files/` | Pipeline utama: `proses_video.py`, `adaptive_bed.py`, `kangkung_cv.py`, evaluasi, kalibrasi, GT tool |
+| `raspi/` | Paket **ready-to-use Raspberry Pi**: `install.sh`, `kangkung_pi.py`, `camera_pi.py` (kamera CSI), systemd, thermal guard, Firebase uplink |
+| `web/` | **Dashboard web statis** (live monitoring, tanpa build) — lihat [`web/README.md`](web/README.md) |
+| `notebooks/` | Notebook presentasi (`presentasi_kangkung_cv.ipynb`, tereksekusi) |
+| `docs/` | Indeks dokumen, laporan progres, skema Firebase `bed_readings`, panduan GT, laporan PDF — lihat [`docs/README.md`](docs/README.md) |
+| `gt/` | Mask ground truth hasil anotasi (`buat_gt.py`) — belum diisi, lihat [`docs/PANDUAN_GT.md`](docs/PANDUAN_GT.md) |
+| `files paper/` | **53 referensi paper** terverifikasi (OpenAlex) dalam markdown |
+| `data/`, `dataset1/`, `output/` | Video mentah, foto lapangan, hasil proses — *tidak di-commit* (lihat `.gitignore`) |
 
 ## Quickstart — Laptop (analisis video)
 
 ```bash
-git clone https://github.com/<USER>/kangkung-cv-aquaponik.git
+git clone https://github.com/FIllxe/kangkung-cv-aquaponik.git
 cd kangkung-cv-aquaponik
 pip install -r files/requirements.txt
 
@@ -42,15 +56,19 @@ python proses_video.py ..\data\videos\VIDEO_ANDA.MOV --adaptive --no-gui --save
 ## Quickstart — Raspberry Pi (live monitoring outdoor)
 
 ```bash
-git clone https://github.com/<USER>/kangkung-cv-aquaponik.git ~/kangkung_pi_src
+git clone https://github.com/FIllxe/kangkung-cv-aquaponik.git ~/kangkung_pi_src
 cd ~/kangkung_pi_src/raspi
-bash install.sh          # copy → venv → deps → systemd auto-start
+bash install.sh                      # copy → venv → deps (+libcamera) → systemd
+cd ~/kangkung_pi
+./venv/bin/python camera_pi.py       # cek kamera: 1 frame → /tmp/camera_pi_test.jpg
+./venv/bin/python kangkung_pi.py --test
 sudo systemctl start kangkung
 journalctl -u kangkung -f
 ```
 
-Detail lengkap (Tailscale remote, multi-user tanpa login, burn-in test 24 jam):
-lihat [`raspi/README.md`](raspi/README.md).
+Detail lengkap (persiapan hardware, kamera CSI/IR, Tailscale remote, multi-user
+tanpa login, troubleshooting, burn-in test 24 jam): lihat
+[`raspi/README.md`](raspi/README.md).
 
 ## Output per Sesi
 
@@ -72,10 +90,16 @@ lihat [`raspi/README.md`](raspi/README.md).
 
 ## Dokumentasi
 
-- [Skema Firebase `bed_readings` v1.0](docs/SKEMA_FIREBASE_BED_READINGS.md)
-- [Laporan progres & timeline](docs/LAPORAN_PROGRES_BIMBINGAN.md)
-- [Referensi method baru](files%20paper/REFERENSI_METHOD_BARU.md) ·
-  [Referensi kesehatan daun](files%20paper/REFERENSI_KESEHATAN_DAUN.md)
+| Dokumen | Isi |
+|---|---|
+| [`docs/README.md`](docs/README.md) | **Indeks dokumentasi** (mulai dari sini) |
+| [`docs/SKEMA_FIREBASE_BED_READINGS.md`](docs/SKEMA_FIREBASE_BED_READINGS.md) | Kontrak data `bed_readings` v1.0 untuk dashboard |
+| [`docs/PANDUAN_GT.md`](docs/PANDUAN_GT.md) | Anotasi ground truth (Bab 4) + **checklist deploy Raspberry Pi** |
+| [`docs/LAPORAN_PROGRES_BIMBINGAN.md`](docs/LAPORAN_PROGRES_BIMBINGAN.md) | Laporan progres & timeline bimbingan |
+| [`raspi/README.md`](raspi/README.md) | Deploy Pi, kamera CSI, remote Tailscale, troubleshooting, burn-in |
+| [`web/README.md`](web/README.md) | **Dashboard web live monitoring**: fitur, mode demo, sambung Firebase, hosting |
+| [`gt/README.md`](gt/README.md) | Konvensi nama mask ground truth |
+| [`files paper/REFERENSI_METHOD_BARU.md`](files%20paper/REFERENSI_METHOD_BARU.md) · [`REFERENSI_KESEHATAN_DAUN.md`](files%20paper/REFERENSI_KESEHATAN_DAUN.md) | 53 referensi terverifikasi (OpenAlex) |
 
 ## Lisensi
 
