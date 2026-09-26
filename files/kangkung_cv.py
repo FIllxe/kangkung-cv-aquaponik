@@ -8,9 +8,9 @@
 
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.gridspec import GridSpec
+# Catatan: matplotlib TIDAK di-import di sini. Hanya dipakai untuk
+# visualisasi() (debug/plot di laptop) -> import dilakukan di dalam fungsi
+# tersebut agar Raspberry Pi tetap ringan tanpa paket matplotlib.
 import json
 import os
 import sys
@@ -60,6 +60,27 @@ KESEHATAN = {
     "coklat_waspada": 3.0,    # % tanaman coklat (lebih serius)
     "coklat_sakit":   8.0,
 }
+
+
+# ─── Indeks stres PSI (Plant Stress Index) ────────────────────────────────────
+# Kontrak ke kontroler fuzzy (rekan tim, Bab 5): skalar 0-100, TINGGI = makin
+# stres. Dinormalkan ke ambang KESEHATAN di atas, dengan alasan:
+#   - PSI = 100  <=>  gejala setara ambang "sakit" (kuning 25% / coklat 8%)
+#   - tidak jenuh: rumus lama (2*kuning + 5*coklat) sudah mentok di 20% coklat
+#     atau 50% kuning, sehingga fuzzy kehilangan gradien di area paling penting
+#   - bobot coklat lebih besar (nekrosis = jaringan mati, tidak dapat dipulihkan)
+# CATATAN TERMINOLOGI: "PSI" di proyek ini = Plant Stress Index (istilah tim),
+# BUKAN Photosystem I (fisiologi tumbuhan). Selalu tulis lengkap di laporan.
+PSI_VERSION = "1.0"
+PSI_BOBOT = {"kuning": 0.4, "coklat": 0.6}
+
+
+def hitung_psi(pct_kuning, pct_coklat):
+    """PSI 0-100 dari % klorosis & % nekrosis (tinggi = makin stres)."""
+    k = min(max(float(pct_kuning), 0.0) / KESEHATAN["kuning_sakit"], 1.0)
+    c = min(max(float(pct_coklat), 0.0) / KESEHATAN["coklat_sakit"], 1.0)
+    return round(100.0 * min(1.0, PSI_BOBOT["kuning"] * k +
+                                 PSI_BOBOT["coklat"] * c), 1)
 
 
 # Ambang batas kesiapan panen (dalam % coverage per zona)
@@ -327,13 +348,9 @@ class KangkungAnalyzer:
         self.mask_coklat = cv2.inRange(hsv, rng["coklat"]["lower"],
                                        rng["coklat"]["upper"])
 
-        # Media tanam/bed juga coklat → coklat hanya valid bila BERDEKATAN
-        # dengan kanopi hijau (daun mati muncul di dalam/tepi kanopi, bukan
-        # di seluruh permukaan media). Adjacency via dilasi hijau 21x21.
-        hijau_raw = cv2.bitwise_or(self.mask_muda, self.mask_mature)
-        adj = cv2.dilate(hijau_raw,
-                         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21)))
-        self.mask_coklat = cv2.bitwise_and(self.mask_coklat, adj)
+        # Gate adjacency coklat dijalankan SETELAH mask_clean di bawah, karena
+        # harus memakai hijau yang sudah dibersihkan (paritas dengan
+        # mask_tanaman_warna() di adaptive_bed.py).
 
         # Gabung semua tanaman (hijau muda + tua)
         mask_raw = cv2.bitwise_or(self.mask_muda, self.mask_mature)
@@ -346,6 +363,17 @@ class KangkungAnalyzer:
         mask_clean = cv2.morphologyEx(mask_raw, cv2.MORPH_OPEN,  kernel3)
         # Tutup lubang kecil di dalam daun
         mask_clean = cv2.morphologyEx(mask_clean, cv2.MORPH_CLOSE, kernel7)
+
+        # Media tanam/bed juga coklat → coklat hanya valid bila BERDEKATAN
+        # dengan kanopi hijau (daun mati muncul di dalam/tepi kanopi, bukan
+        # di seluruh permukaan media). Adjacency via dilasi hijau 21x21.
+        # WAJIB memakai mask_clean (bukan hijau raw): dengan mask raw, speck
+        # noise hijau ikut melegitimasi coklat di luar kanopi sehingga
+        # %coklat CLI (48%) dan jalur live/Pi (39%) berbeda pada gambar yang
+        # sama. Angka inilah yang menjadi PSI → harus konsisten antar jalur.
+        adj = cv2.dilate(mask_clean,
+                         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (21, 21)))
+        self.mask_coklat = cv2.bitwise_and(self.mask_coklat, adj)
 
         # Bercak kuning/coklat: cukup open (bercak kecil justru informasi
         # penting — jangan di-close agar tidak menyatu dengan kanopi hijau)
@@ -450,6 +478,13 @@ class KangkungAnalyzer:
         coklat_rata = float(np.mean([z["pct_coklat"]
                                      for z in self.zone_results.values()]))
 
+        # Indeks stres PSI: agregat bed + zona terburuk (agar 1 zona mati
+        # tidak hilang di rata-rata; psi_maks jadi anteseden kedua untuk fuzzy)
+        psi_rata = hitung_psi(kuning_rata, coklat_rata)
+        psi_maks = round(max((hitung_psi(z["pct_kuning"], z["pct_coklat"])
+                              for z in self.zone_results.values()),
+                             default=0.0), 1)
+
         self.global_stats = {
             "total_zona":           n_zona,
             "coverage_rata":        round(np.mean(all_cov),  2),
@@ -465,6 +500,9 @@ class KangkungAnalyzer:
             "kuning_rata":          round(kuning_rata, 2),
             "coklat_rata":          round(coklat_rata, 2),
             "zona_sakit":           kes_count["sakit"],
+            "psi":                  psi_rata,
+            "psi_maks":             psi_maks,
+            "psi_versi":            PSI_VERSION,
             "rekomendasi_kesehatan": self._buat_rekomendasi_kesehatan(
                                         kes_count, kuning_rata, coklat_rata),
             "rekomendasi":          self._buat_rekomendasi(
@@ -506,6 +544,19 @@ class KangkungAnalyzer:
     # ── Visualisasi ───────────────────────────────────────────────────────────
 
     def visualisasi(self, save_path=None):
+        # Import di dalam fungsi: matplotlib hanya dibutuhkan untuk plot debug,
+        # sehingga pipeline di Raspberry Pi (kangkung_pi.py) tidak memerlukannya.
+        try:
+            import matplotlib
+            matplotlib.use("Agg")            # aman tanpa display (headless)
+            import matplotlib.pyplot as plt
+            import matplotlib.patches as mpatches
+            from matplotlib.gridspec import GridSpec
+        except ImportError as e:
+            raise ImportError(
+                "visualisasi() butuh matplotlib "
+                "(laptop: pip install matplotlib)") from e
+
         fig = plt.figure(figsize=(22, 14), facecolor="#1a1a2e")
         fig.patch.set_facecolor("#1a1a2e")
 

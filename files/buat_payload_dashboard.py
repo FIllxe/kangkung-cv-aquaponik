@@ -3,7 +3,7 @@
   BUAT PAYLOAD DASHBOARD — Konversi <stem>_laporan.json → skema Firestore
   Tahap A: TANPA dependensi Firebase. Murni konversi JSON lokal.
 =============================================================================
-  Skema dokumen (collection "bed_readings", v1.0):
+  Skema dokumen (collection "bed_readings", v1.1):
     device_id          string   ID perangkat (mis. "pi-bed-01")
     timestamp          string   ISO-8601 + zona waktu ("...+07:00")
     mode               string   STANDARD | ADAPTIVE | MANUAL | AUTO
@@ -14,7 +14,14 @@
     status_distribusi  object   {"belum_siap":n,"hampir_siap":n,
                                  "siap_panen":n,"harus_panen":n}
     rekomendasi        string   teks rekomendasi (emoji dilepas)
-    zona               object   24 entri: {coverage, status} SAJA (ramping)
+    zona               object   24 entri: {coverage, status, pct_kuning,
+                                  pct_coklat, kesehatan}
+    fuzzy_input        object   input crisp untuk kontroler fuzzy (rekan tim):
+                                  {kuning_pct, coklat_pct, zona_sakit,
+                                  psi, psi_maks, psi_versi, indeks_sehat}
+                                  psi = Plant Stress Index 0-100 (TINGGI =
+                                  makin stres), normalisasi ke ambang
+                                  KESEHATAN (kuning 25% / coklat 8%)
     snapshot_url       string?  URL Storage snapshot (null jika belum ada)
     suhu_pi_c          float?   suhu SoC Pi saat capture (null jika n/a)
 
@@ -43,6 +50,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from kangkung_cv import PSI_VERSION, hitung_psi
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE_DIR = ROOT / "output" / "segmentasi_batch"
@@ -96,11 +104,30 @@ def buat_payload(path_laporan: Path, device_id: str = "pi-bed-01",
             "kesehatan": z.get("kesehatan", "sehat"),
         }
 
-    # Input untuk kontroler fuzzy pompa (rekan tim): crisp 0-100
+    # Input untuk kontroler fuzzy (rekan tim): crisp 0-100
+    # Menghitung ulang dengan hitung_psi() yang sama dengan jalur Pi
+    # (raspi/fuzzy_export.py) → angka PSI identik di kedua jalur.
+    if glob.get("psi") is not None:
+        psi = round(float(glob["psi"]), 1)
+    else:
+        psi = hitung_psi(float(glob.get("kuning_rata", 0.0)),
+                         float(glob.get("coklat_rata", 0.0)))
+    if glob.get("psi_maks") is not None:
+        psi_maks = round(float(glob["psi_maks"]), 1)
+    else:
+        psi_maks = round(max((hitung_psi(z["pct_kuning"], z["pct_coklat"])
+                              for z in zona.values()), default=0.0), 1)
+    zona_sakit = int(glob.get("zona_sakit",
+                              sum(1 for z in zona.values()
+                                  if z["kesehatan"] == "sakit")))
     fuzzy_input = {
         "kuning_pct": round(float(glob.get("kuning_rata", 0.0)), 2),
         "coklat_pct": round(float(glob.get("coklat_rata", 0.0)), 2),
-        "zona_sakit": int(glob.get("zona_sakit", 0)),
+        "zona_sakit": zona_sakit,
+        "psi": psi,
+        "psi_maks": psi_maks,
+        "psi_versi": PSI_VERSION,
+        "indeks_sehat": round(100.0 - psi, 1),
     }
 
     return {
