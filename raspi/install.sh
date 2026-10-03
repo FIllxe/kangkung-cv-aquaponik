@@ -46,21 +46,24 @@ if [ ! -f service-account.json ]; then
     echo "  >>> Monitor tetap bisa jalan lokal (mode offline) sampai diisi."
 fi
 
-echo "[4/5] Pasang systemd service (auto-start + auto-restart)..."
-sudo cp service/kangkung.service /etc/systemd/system/
-WORKDIR="$TARGET_DIR"
-sudo sed -i "s|/home/pi/kangkung_pi|$WORKDIR|g" /etc/systemd/system/kangkung.service
-sudo sed -i "s|User=pi|User=$USER|g" /etc/systemd/system/kangkung.service
-sudo cp service/kangkung-camera.service /etc/systemd/system/
-sudo sed -i "s|/home/pi/kangkung_pi|$WORKDIR|g" /etc/systemd/system/kangkung-camera.service
-sudo sed -i "s|User=pi|User=$USER|g" /etc/systemd/system/kangkung-camera.service
+echo "[4/5] Pasang systemd --user service (headless, tanpa sudo untuk start)..."
+# Dipakai sebagai USER service supaya bisa start/stop dari SSH tanpa password sudo,
+# dan tetap auto-start saat Pi reboot lewat autologin LightDM.
+USER_UNIT_DIR="$HOME/.config/systemd/user"
+mkdir -p "$USER_UNIT_DIR"
+for unit in kangkung.service kangkung-camera.service; do
+    sed -e "s|/home/pi/kangkung_pi|$TARGET_DIR|g" \
+        -e "s|User=pi|User=$USER|g" \
+        "service/$unit" > "$USER_UNIT_DIR/$unit"
+    systemctl --user daemon-reload
+done
 # Preview tidak di-enable: kamera CSI eksklusif dengan monitor periodik.
-# Mulai manual saat dibutuhkan agar kangkung.service dan camera tidak berebut.
-sudo systemctl daemon-reload
-sudo systemctl enable kangkung
+# Monitor periodik yang auto-start supaya Pi langsung berguna setelah reboot.
+systemctl --user enable kangkung.service
 
 echo "[5/5] Selesai!"
-echo "  Mulai monitor : sudo systemctl start kangkung"
-echo "  Cek log       : journalctl -u kangkung -f"
-echo "  Stop          : sudo systemctl stop kangkung"
-echo "  Live camera   : sudo systemctl start kangkung-camera"
+echo "  Mulai monitor : systemctl --user start kangkung"
+echo "  Cek log       : journalctl --user -u kangkung -f"
+echo "  Stop          : systemctl --user stop kangkung"
+echo "  Live camera   : systemctl --user start kangkung-camera"
+echo "  Kamera off    : systemctl --user stop kangkung-camera"

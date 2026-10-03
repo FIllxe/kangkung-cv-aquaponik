@@ -48,10 +48,10 @@ Dokumen terkait:
    Kriteria lulus: baris `[OK] pi-bed-01_<stamp>  cov=..%`.
    Bila `[WARN] bed tidak terdeteksi` → bidikan/fokus lensa belum benar
    (§ Troubleshooting).
-7. **Mulai service**:
+7. **Mulai service** (user service — tanpa `sudo`, aman untuk operasi headless):
    ```
-   sudo systemctl start kangkung
-   journalctl -u kangkung -f     # lihat log live
+   systemctl --user start kangkung
+   journalctl --user -u kangkung -f     # lihat log live
    ```
 
 ## Konfigurasi `config.json`
@@ -169,7 +169,7 @@ Host ecofarm
 | Gambar ungu/magenta & blur | modul NoIR + lensa belum fokus | jauhkan sumber cahaya dari frame, putar lensa berulir sampai tajam |
 | `[WARN] bed tidak terdeteksi` | tidak semua tepi bed masuk frame / terlalu miring / terlalu gelap | luruskan & dekatkan kamera, pastikan 4 tepi terlihat, naikkan `csi_warmup_detik` |
 | `[UPLINK] service-account.json belum ada` | kredensial Firebase belum ditaruh | taruh `service-account.json` di `~/kangkung_pi/` — sementara itu payload tetap aman di `outbox/` |
-| Service tidak jalan setelah reboot | belum di-`enable` | `sudo systemctl enable kangkung` |
+| Service tidak jalan setelah reboot | autologin LightDM berubah / unit belum di-`enable` | `systemctl --user enable kangkung`; pastikan `autologin-user=aquaponic` masih ada di `/etc/lightdm/lightdm.conf` |
 | WiFi kampus (WPA2-Enterprise) sering putus / tidak bisa saling ping | idle-timeout + client isolation | pakai hotspot/router sendiri untuk Pi, dan Tailscale untuk akses admin jarak jauh |
 
 ## Catatan desain (kenapa dibuat begini)
@@ -227,16 +227,24 @@ Server hanya bind ke **IP Tailscale `100.123.187.56`**, sehingga tidak bisa dibu
 dari WiFi biasa/internet publik. Trafik tetap terenkripsi oleh WireGuard Tailscale.
 
 Kamera bersifat eksklusif; monitor periodik dan preview live tidak boleh aktif
-bersamaan. Pilih salah satu:
+bersamaan. Kedua unit punya `Conflicts=` sehingga salah satu otomatis menghentikan
+yang lain. Pilih salah satu (perintah `systemctl --user` **tidak perlu sudo**):
 
 ```bash
-# Monitor periodik + dashboard
-sudo systemctl start kangkung
-sudo systemctl stop kangkung-camera
+# Preview live (kamera CSI dipakai untuk streaming)
+systemctl --user stop kangkung
+systemctl --user start kangkung-camera
 
-# Preview live
-sudo systemctl stop kangkung
-sudo systemctl start kangkung-camera
+# Monitor periodik + dashboard (kamera dipakai untuk snapshot tiap siklus)
+systemctl --user stop kangkung-camera
+systemctl --user start kangkung
+```
+
+Status cepat:
+
+```bash
+systemctl --user status kangkung-camera --no-pager
+systemctl --user status kangkung --no-pager
 ```
 
 Buka link ber-token berikut dari laptop yang sudah login ke akun Tailscale
@@ -256,18 +264,58 @@ Untuk merotasi token (membatalkan semua link lama):
 
 ```bash
 rm ~/.config/kangkung-camera.token
-sudo systemctl restart kangkung-camera
+systemctl --user restart kangkung-camera
 ```
 
-Cek kondisi stream dari Pi/laptop:
+Cek kondisi stream dari laptop (lewat Tailscale) atau dari Pi:
 
 ```bash
 curl "http://127.0.0.1:8787/health?token=$(cat ~/.config/kangkung-camera.token)"
-journalctl -u kangkung-camera -f
+journalctl --user -u kangkung-camera -f
 ```
 
 > Jangan membagikan atau melakukan screenshot link karena URL tersebut berisi token
 > rahasia. Tailscale yang membatasi siapa saja yang dapat masuk ke jaringan.
+
+## Operasi headless (tanpa keyboard/mouse)
+
+Semua perintah dijalankan dari laptop lewat SSH — Pi tidak perlu disentuh:
+
+```bash
+ssh aquaponic@ecofarm "systemctl --user restart kangkung-camera"
+```
+
+| Kebutuhan | Solusi |
+|---|---|
+| Start/stop service | `systemctl --user ...` (tanpa sudo, tidak perlu monitor/keyboard) |
+| Auto-start setelah reboot | Unit `enable` + `linger=yes` + autologin LightDM `aquaponic` |
+| Lihat log | `journalctl --user -u kangkung-camera -f` |
+| Cek suhu/RAM | `vcgencmd measure_temp` / `free -m` |
+| Edit file | `scp file aquaponic@ecofarm:~/kangkung_pi/...` |
+
+### Tiga lapis auto-start di Pi ini
+
+1. `systemctl --user enable kangkung-camera` — unit ikut start saat boot.
+2. `loginctl enable-linger aquaponic` — user manager (`systemd --user`) tetap hidup
+   **walau tidak ada yang login**. Install ulang OS / autologin dimatikan pun aman.
+3. `autologin-user=aquaponic` di `/etc/lightdm/lightdm.conf` — sesi desktop
+   terbentuk sendiri, jadi unit systemd `--user` selalu ter-load.
+
+Ketiganya sudah aktif di Pi `ecofarm`. Verifikasi kapan saja:
+
+```bash
+loginctl show-user aquaponic --property=Linger      # harus: Linger=yes
+systemctl --user is-enabled kangkung-camera         # harus: enabled
+grep autologin-user /etc/lightdm/lightdm.conf
+```
+
+Kalau `Linger=no` (mis. setelah reinstall), cukup jalankan sekali:
+
+```bash
+sudo loginctl enable-linger aquaponic
+```
+
+> Segera ganti password sudo Pi: passwordnya sempat dibagikan lewat chat.
 
 ## Burn-in test 24 jam (WAJIB sebelum dipasang permanen outdoor)
 
@@ -281,6 +329,12 @@ journalctl -u kangkung-camera -f
 | Antrean tidak menumpuk | `ls outbox/` di Pi (bukan outbox/sent) | Kosong / < 3 file (internet lancar) |
 | Auto-restart hidup | `sudo reboot` → cek 2 menit kemudian | Monitor jalan lagi tanpa login manual |
 | Offline queue | Cabut WiFi 15 menit, sambungkan lagi | File di outbox terkirim setelah online |
+
+Log monitor periodik ada di user service, jadi tanpa `sudo`:
+
+```bash
+journalctl --user -u kangkung --since "24 hours ago" | grep -c "\[OK\]"
+```
 
 **Jika semua lulus → taruh di outdoor permanen.** Jika tidak, perbaiki dulu
 (kipas/ventilasi untuk suhu, `interval_menit` dinaikkan untuk mengurangi beban).
@@ -298,7 +352,7 @@ scp raspi/camera_pi.py raspi/kangkung_pi.py aquaponic@<ip-pi>:~/kangkung_pi/
 lalu restart service:
 
 ```
-ssh aquaponic@<ip-pi> "sudo systemctl restart kangkung"
+ssh aquaponic@<ip-pi> "systemctl --user restart kangkung"
 ```
 
 Khusus `config.json`: setelah diubah di Pi, tidak perlu restart — dibaca ulang
@@ -324,10 +378,10 @@ tiap siklus baru (setelah `interval_menit`).
 | `firebase_uplink.py` | Upload Firestore/Storage + antrean offline (`outbox/` → `outbox/sent/`) |
 | `fuzzy_export.py` | Membangun `fuzzy_input` untuk kontroler fuzzy: %klorosis, %nekrosis, `zona_sakit`, **PSI 0–100** (`psi`, `psi_maks`, `psi_versi`) + `indeks_sehat` legacy |
 | `thermal_guard.py` | Baca suhu SoC; tunda capture saat panas |
-| `install.sh` | Installer: copy paket → venv (`--system-site-packages`) → deps → systemd |
+| `install.sh` | Installer: copy paket → venv (`--system-site-packages`) → deps → systemd **user** units |
 | `requirements-pi.txt` | Dependensi pip: `opencv-python-headless`, `numpy`, `firebase-admin` |
-| `service/kangkung.service` | Unit systemd monitor periodik (auto-start + auto-restart) |
-| `service/kangkung-camera.service` | Unit systemd preview live (manual; eksklusif dengan monitor) |
+| `service/kangkung.service` | Unit systemd **user** monitor periodik (auto-start + auto-restart) |
+| `service/kangkung-camera.service` | Unit systemd **user** preview live (manual; eksklusif dengan monitor) |
 | `config.json` | Konfigurasi per perangkat (file utama yang diedit) — lihat § Konfigurasi |
 | `service-account.json.EXAMPLE` | Kerangka kredensial Firebase (salin → `service-account.json`, jangan di-commit) |
 | `README.md` | Dokumen ini |

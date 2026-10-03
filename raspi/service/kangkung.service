@@ -2,6 +2,8 @@
 Description=Kangkung Aquaponik Live Monitor (Pi -> Firebase)
 After=network-online.target
 Wants=network-online.target
+# Lihat kangkung-camera.service: kamera CSI hanya bisa dipakai satu proses.
+Conflicts=kangkung-camera.service
 
 [Service]
 Type=simple
@@ -9,8 +11,7 @@ WorkingDirectory=/home/pi/kangkung_pi
 ExecStart=/home/pi/kangkung_pi/venv/bin/python kangkung_pi.py
 Restart=always
 RestartSec=15
-User=pi
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

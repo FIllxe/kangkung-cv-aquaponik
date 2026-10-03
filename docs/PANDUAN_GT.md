@@ -109,7 +109,7 @@ cd ~/kangkung_pi
 ./venv/bin/python kangkung_pi.py --test   # harus muncul [OK] ... cov=..%
 
 # 5) jalankan service
-sudo systemctl start kangkung && journalctl -u kangkung -f
+systemctl --user start kangkung && journalctl --user -u kangkung -f
 ```
 
 - [ ] Kamera terdeteksi: `rpicam-hello --list-cameras` menampilkan `ov5647`.

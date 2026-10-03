@@ -35,8 +35,9 @@ Video/Kamera → Deteksi Bed (Canny edge / HSV) → Warp Perspektif → Grid 4×
 | `files/` | Pipeline utama: `proses_video.py`, `adaptive_bed.py`, `kangkung_cv.py`, evaluasi, kalibrasi, GT tool |
 | `raspi/` | Paket **ready-to-use Raspberry Pi**: `install.sh`, `kangkung_pi.py`, `camera_pi.py` (kamera CSI), systemd, thermal guard, Firebase uplink |
 | `web/` | **Dashboard web statis** (live monitoring, tanpa build) — lihat [`web/README.md`](web/README.md) |
-| `notebooks/` | Notebook presentasi (`presentasi_kangkung_cv.ipynb`, tereksekusi) |
-| `docs/` | Indeks dokumen, laporan progres, skema Firebase `bed_readings`, panduan GT, laporan PDF — lihat [`docs/README.md`](docs/README.md) |
+| `notebooks/` | Notebook presentasi (`presentasi_kangkung_cv.ipynb`, tereksekusi) + **naskah presentasi video** (`naskah_presentasi_video.ipynb`, dibuat oleh `notebooks/buat_naskah_presentasi.py`) |
+| `docs/` | Indeks dokumen, laporan progres, skema Firebase `bed_readings`, panduan GT, proposal + slide sempro — lihat [`docs/README.md`](docs/README.md) |
+| `hardware/` | Desain OpenSCAD box + mounting kamera (`params.scad` = sumber dimensi; STL/renders dibuat ulang via `build.ps1`, tidak di-commit) |
 | `gt/` | Mask ground truth hasil anotasi (`buat_gt.py`) — belum diisi, lihat [`docs/PANDUAN_GT.md`](docs/PANDUAN_GT.md) |
 | `files paper/` | **53 referensi paper** terverifikasi (OpenAlex) dalam markdown |
 | `data/`, `dataset1/`, `output/` | Video mentah, foto lapangan, hasil proses — *tidak di-commit* (lihat `.gitignore`) |
@@ -62,8 +63,8 @@ bash install.sh                      # copy → venv → deps (+libcamera) → s
 cd ~/kangkung_pi
 ./venv/bin/python camera_pi.py       # cek kamera: 1 frame → /tmp/camera_pi_test.jpg
 ./venv/bin/python kangkung_pi.py --test
-sudo systemctl start kangkung
-journalctl -u kangkung -f
+systemctl --user start kangkung
+journalctl --user -u kangkung -f
 ```
 
 Detail lengkap (persiapan hardware, kamera CSI/IR, Tailscale remote, multi-user

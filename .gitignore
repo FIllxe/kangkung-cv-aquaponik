@@ -18,8 +18,12 @@ videos/
 
 # Dataset foto lapangan (besar, simpan di Google Drive/Cloud terpisah)
 *.jpg
+*.jpeg
 *.png
-!docs/**/*.png
+# Aset gambar kecil yang memang bagian dari dokumen proposal/presentasi
+!docs/*.png
+# Aset verifikasi tutup box pasangan (bukan hasil build OpenSCAD)
+!hardware/files/*.png
 
 # ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
@@ -31,3 +35,14 @@ venv/
 # ── Sistem ───────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+# File lock sementara Microsoft Office (mis. ~$dokumen.pptx) — jangan di-commit
+~$*
+
+# ── Log & file sementara ─────────────────────────────────────────────────────
+*.log
+*.err
+
+# ── Hardware (OpenSCAD) — output hasil build ──────────────────────────────────
+# Kode .scad & params.scad JANGAN diabaikan; hanya hasil build yang diabaikan.
+hardware/stl/
+hardware/renders/

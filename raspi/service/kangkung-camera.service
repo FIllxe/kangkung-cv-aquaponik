@@ -1,7 +1,9 @@
 [Unit]
-Description=Kangkung Live Camera (MJPEG via Tailscale)
+Description=Kangkung Live Camera (MJPEG via Tailscale, headless)
 After=network-online.target tailscaled.service
 Wants=network-online.target
+# Kamera CSI eksklusif: preview live dan monitor periodik tidak boleh bareng.
+Conflicts=kangkung.service
 
 [Service]
 Type=simple
@@ -9,10 +11,9 @@ WorkingDirectory=/home/pi/kangkung_pi
 ExecStart=/home/pi/kangkung_pi/venv/bin/python camera_live.py --host auto --port 8787 --fps 2
 Restart=on-failure
 RestartSec=5
-User=pi
 Environment=PYTHONUNBUFFERED=1
 NoNewPrivileges=true
 PrivateTmp=true
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
