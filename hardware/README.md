@@ -45,7 +45,7 @@ keputusan thermal yang berbeda.
 
 ## `tutup_pi4b.scad` - tutup untuk box PASANGAN (produk terpisah)
 
-> **Jangan dicampur dengan `enclosure_tupid.scad`.** Keduanya tutup, tapi untuk
+> **Jangan dicampur dengan `enclosure_tutup.scad`.** Keduanya tutup, tapi untuk
 > box yang berbeda dan tidak saling terkait.
 
 | | Part | STL |
@@ -611,11 +611,14 @@ hardware/
   camera_holder.scad    jepit modul kamera
   mount_base.scad       klem hollow persegi / pipa / flange / dasbor dinding
   arm.scad              lengan + pelat ujung
+  tutup_pi4b.scad       tutup box PASANGAN files/ (produk terpisah, bukan enclosure_tutup)
   assembly.scad         pratinjau rakitan (jangan dicetak)
+  preview.scad/.ps1     rakitan lengkap + phantom -> renders/preview_*.png
   build.ps1             compile STL + render 8 sudut
   cek_mesh.ps1          validator STL (watertight / manifold / komponen)
-  stl/                  output STL
-  renders/              output PNG
+  files/                box Pi4B pasangan (final) + README-nya
+  stl/                  output STL (di-ignore, bangun ulang via build.ps1)
+  renders/              output PNG (di-ignore, bangun ulang via build.ps1)
 ```
 
 ## Catatan lisensi

@@ -4,7 +4,7 @@
 //  PASANGAN: files\pi4b_camera_enclosure_bottom.stl
 //  File itu dibuat oleh files\build_pi4b_enclosure.py. Lid ini terpisah karena
 //  pasangan STL-nya sudah final dan tidak memakai params.scad parametric yang
-//  lain. JANGAN disamakan dengan enclosure_tupid.scad - itu untuk box parametric
+//  lain. JANGAN disamakan dengan enclosure_tutup.scad - itu untuk box parametric
 //  yang lebarnya 143,8 mm, jadi produk yang berbeda.
 //
 //  SUMBER UKURAN
