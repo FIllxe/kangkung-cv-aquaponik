@@ -1,6 +1,7 @@
 """Buat gambar bukti ASLI utk PPT (bukan simulasi) -> output/ppt_asli/
 1. frame asli IMG_5159 (HP) vs frame beranotasi pipeline (MP4 output)
-2. bed_04_ready.jpg (foto asli) vs bed_04_ready_segmentasi.png (output batch)
+2. frame asli video lapangan IMG_5388 (frame 250) vs keluaran segmentasi
+   HSV adaptif pada frame yang sama (BUKAN foto sintetis bed_04_ready.jpg)
 3. grafik timeseries coverage asli dari CSV IMG_5159 (763 frame)
 4. grafik tren coverage 7 foto batch asli (seedling->ready) dari JSON laporan
 5. tabel PSI asli dari 7 laporan batch (cek_psi --laporan)
@@ -32,17 +33,41 @@ cv2.putText(gab, "OUTPUT PIPELINE (grid+HUD)", (980, 35), cv2.FONT_HERSHEY_SIMPL
 cv2.imwrite(str(OUT / "01_asli_vs_anotasi.jpg"), gab)
 print("OK 01", gab.shape)
 
-# 2) FOTO ASLI vs SEGMENTASI (bed_04_ready)
-foto = cv2.imread(str(ROOT / "dataset1" / "bed_04_ready.jpg"))
-seg = cv2.imread(str(ROOT / "output" / "segmentasi_batch" / "bed_04_ready_segmentasi.png"))
-h, w = seg.shape[:2]
-seg_crop = seg[int(h * 0.28):int(h * 0.78), int(w * 0.10):int(w * 0.90)]
-foto_r = cv2.resize(foto, (seg_crop.shape[1], seg_crop.shape[0]))
-gab2 = np.vstack([foto_r, seg_crop])
-cv2.putText(gab2, "FOTO ASLI bed_04_ready.jpg (lapangan)", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-cv2.putText(gab2, "OUTPUT batch_segmentasi.py (cov 22,56%)", (20, seg_crop.shape[0] + 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+# 2) FRAME VIDEO ASLI vs SEGMENTASI (IMG_5388 frame 250 — video lapangan asli)
+#    (sebelumnya memakai bed_04_ready.jpg yang ternyata citra sintetis)
+import sys
+sys.path.insert(0, str(ROOT / "files"))
+from kangkung_cv import KangkungAnalyzer
+
+cap_v = cv2.VideoCapture(str(ROOT / "data" / "videos" / "IMG_5388.MOV"))
+cap_v.set(cv2.CAP_PROP_POS_FRAMES, 250)
+okv, fr_v = cap_v.read(); cap_v.release()
+assert okv, "gagal baca IMG_5388.MOV frame 250"
+
+an = KangkungAnalyzer()
+an.image_orig = fr_v
+an.h, an.w = fr_v.shape[:2]
+an.segment(adaptif=True)
+cov_v = an.mask_total.sum() / 255 / an.mask_total.size * 100
+
+tint = np.full_like(fr_v, (60, 60, 60))
+for m, col in ((an.mask_muda,   (120, 230, 120)),
+               (an.mask_mature, (0, 180, 0)),
+               (an.mask_kuning, (0, 220, 230)),
+               (an.mask_coklat, (40, 70, 130))):
+    tint[m > 0] = col
+ovl = cv2.addWeighted(fr_v, 0.35, tint, 0.65, 0)
+
+vr = cv2.resize(fr_v, (960, 540))
+ovr = cv2.resize(ovl, (960, 540))
+gab2 = np.hstack([vr, ovr])
+lbl = "OUTPUT SEGMENTASI HSV adaptif (liputan %s%%)" % f"{cov_v:.1f}".replace(".", ",")
+cv2.putText(gab2, "FRAME ASLI (video IMG_5388, frame 250)", (20, 35),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+cv2.putText(gab2, lbl, (980, 35),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 cv2.imwrite(str(OUT / "02_foto_vs_segmentasi.jpg"), gab2)
-print("OK 02", gab2.shape)
+print(f"OK 02 {gab2.shape} liputan={cov_v:.1f}%")
 
 # 3) TIMESERIES ASLI IMG_5159 (763 frame dari CSV pipeline)
 with open(ROOT / "output" / "demo" / "IMG_5159_timeseries.csv", encoding="utf-8") as f:
@@ -83,19 +108,25 @@ for i, (c, s) in enumerate(zip(covs, siap)):
 fig.tight_layout(); fig.savefig(str(OUT / "04_tren_7foto.png"), dpi=130); plt.close(fig)
 print("OK 04", list(zip(labels, covs)))
 
-# 5) TABEL PSI ASLI (7 laporan batch -> PSI via hitung_psi, TANPA dummy)
+# 5) TABEL PSI ASLI (7 laporan batch -> PSI v2.0, TANPA dummy)
 import sys
 sys.path.insert(0, str(ROOT / "files"))
-from kangkung_cv import hitung_psi
+from kangkung_cv import hitung_psi, hitung_psi_persen
 rows = []
 for stem in urutan:
     d = json.load(open(ROOT / "output" / "segmentasi_batch" / f"{stem}_laporan.json", encoding="utf-8"))
     g = d["global"]
-    psi = hitung_psi(g["kuning_rata"], g["coklat_rata"])
+    # PSI v2.0 = 100*(0.5*Y + B)/N. Pakai piksel mentah bila laporan sudah
+    # memuatnya (kangkung_cv v2.0); kalau belum, pakai bentuk persentase yang
+    # setara karena PSI linear.
+    if g.get("green_pixels") is not None:
+        psi = hitung_psi(g["green_pixels"], g["yellow_pixels"], g["brown_pixels"])
+    else:
+        psi = hitung_psi_persen(g["kuning_rata"], g["coklat_rata"])
     rows.append((stem, g["kuning_rata"], g["coklat_rata"], g["zona_sakit"], psi))
 fig, ax = plt.subplots(figsize=(12, 3.6))
 ax.axis("off")
-ax.set_title("PSI ASLI dari 7 foto lapangan (hitung_psi: kuning/25 + coklat/8) — bed sehat = PSI ~0", fontsize=12, pad=15)
+ax.set_title("PSI ASLI dari 7 foto lapangan (PSI = 100*(0.5*Y + B)/N) — bed sehat = PSI ~0", fontsize=12, pad=15)
 tab = [["foto", "kuning%", "coklat%", "zona sakit", "PSI"]] + \
       [[r[0][:22], f"{r[1]:.2f}", f"{r[2]:.2f}", str(r[3]), f"{r[4]:.1f}"] for r in rows]
 t = ax.table(cellText=tab, loc="center", colWidths=[0.4, 0.15, 0.15, 0.15, 0.15])
