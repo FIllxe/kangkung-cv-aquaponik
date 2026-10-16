@@ -214,7 +214,7 @@ def set_font_times_new_roman(doc):
 
 
 # ---------------- Normalisasi judul 1.5.2 (perbaiki jika terlalu panjang) ----------------
-JUDUL_152_SHORT = "1.5.2  Dampak Fungsional dan Komersial"
+JUDUL_152_SHORT = "1.5.2  Dampak Fungsional"
 
 
 def normalisasi_judul_152(doc):
@@ -389,7 +389,7 @@ def tahap3c(doc):
         elif tx.startswith("\tBerdasarkan latar belakang yang telah diuraikan, rumusan masalah dalam perancangan prototipe ini adalah sebagai berikut"):
             delete_p(p)
 # ---------------- Tahap 3d (= bangun_felix_t3d.py): dampak ----------------
-DAMPAK82 = "Prototipe yang dirancang memiliki potensi memberikan dampak fungsional pada proses pengelolaan budidaya akuaponik, khususnya dalam menentukan kesiapan panen secara lebih terukur. Keputusan tidak hanya didasarkan pada pengamatan visual, tetapi menggunakan liputan kanopi per zona, status kesehatan daun, dan Indeks Stres Tanaman atau Plant Stress Index (PSI) sebagai keluaran sistem. Peta 24 zona memungkinkan panen selektif pada zona yang siap sedangkan zona yang belum siap dibiarkan tumbuh, sedangkan status sehat, waspada, dan sakit menjadi dasar pemeriksaan lanjutan."
+DAMPAK82 = "Judul 1.5.2 menggambarkan dampak fungsional dan komersial prototipe: dampak fungsional berkaitan dengan manfaat operasional sistem dalam mendukung keputusan panen secara lebih objektif dan terukur, sedangkan dampak komersial berkaitan dengan potensi sistem dikembangkan menjadi produk siap pakai bagi pelaku budidaya akuaponik. Prototipe yang dirancang memiliki potensi memberikan dampak fungsional pada proses pengelolaan budidaya akuaponik, khususnya dalam menentukan kesiapan panen secara lebih terukur. Keputusan tidak hanya didasarkan pada pengamatan visual, tetapi menggunakan liputan kanopi per zona, status kesehatan daun, dan Indeks Stres Tanaman atau Plant Stress Index (PSI) sebagai keluaran sistem. Peta 24 zona memungkinkan panen selektif pada zona yang siap sedangkan zona yang belum siap dibiarkan tumbuh, sedangkan status sehat, waspada, dan sakit menjadi dasar pemeriksaan lanjutan."
 DAMPAK83 = "Penerapan peta zona dalam bentuk status per zona juga memberikan keluaran yang lebih operasional bagi pengelola. Selain itu, sistem dilengkapi arsip runtun waktu per zona dan dasbor dengan grafik 24 jam sehingga tren pertumbuhan tiap zona terpantau. Sementara itu, ambang status 25, 55, dan 80 persen beserta ambang kesehatan kuning 10 dan 25 persen serta cokelat 3 dan 8 persen dapat dikonfigurasi kembali mengikuti hasil validasi ahli."
 DAMPAK84 = "Secara fungsional, prototipe juga memiliki potensi untuk diterapkan pada konfigurasi akuaponik yang berbeda melalui proses penyesuaian parameter. Rentang HSV, ambang status, ambang kesehatan, serta parameter ketinggian kamera dapat dikonfigurasi kembali sesuai kebutuhan. Dengan demikian, arsitektur sistem tidak dibatasi hanya pada satu kondisi instalasi, meskipun penerapan pada sistem lain tetap memerlukan proses kalibrasi dan pengujian ulang."
 DAMPAK86 = "Dari sisi komersial, prototipe ini memiliki potensi untuk dikembangkan menjadi perangkat pendukung monitoring akuaponik yang menilai kelayakan panen dan kesehatan tanaman dalam satu sistem. Arsitektur yang menggunakan komputer papan tunggal, kamera, rumah kamera cetak tiga dimensi, dan konektivitas Internet of Things memungkinkan sistem dikembangkan secara modular sesuai kebutuhan pengguna dan skala instalasi."
@@ -399,6 +399,12 @@ DAMPAK87 = "Pengembangan lebih lanjut dapat diarahkan pada penyederhanaan instal
 def tahap3d(doc):
     for i, teks in ((82, DAMPAK82), (83, DAMPAK83), (84, DAMPAK84), (86, DAMPAK86), (87, DAMPAK87)):
         set_text(doc.paragraphs[i], teks)
+    # Paragraf 87 (Pengembangan lebih lanjut): teks biasa, tidak bold, tidak center,
+    # rata kiri/ justify sehingga menyatu dengan paragraf sebelumnya di akhir bagian 1.5
+    p87 = doc.paragraphs[87]
+    p87.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    for r in p87.runs:
+        r.bold = False
     # Hapus sisa dampak akuaponik template (indeks 82-84 versi lama masih
     # terbaca sebagai teks baru? tidak -- yang bertahan adalah paragraf
     # TAMBAHAN di luar indeks tsb). Singkirkan paragraf template yang masih
@@ -1195,6 +1201,14 @@ def tahap7bspasi(doc):
         i_blank = next(i for i, p in enumerate(ps) if p.text.strip() == "" and i > i_rumusan)
         np_ = deepcopy(ps[i_blank]._p)
         ps[i_rumusan]._p.addprevious(np_)
+    # Pastikan semua paragraf "Pengembangan lebih lanjut" di akhir bagian 1.5
+    # berformat teks biasa: tidak bold, tidak center, rata kiri/justify,
+    # sehingga menyatu dengan paragraf sebelumnya.
+    for p in ps:
+        if "Pengembangan lebih lanjut" in p.text:
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            for r in p.runs:
+                r.bold = False
 
 
 # ---------------- Tahap 8: rapikan Daftar Isi/Tabel/Gambar ----------------
@@ -1635,6 +1649,15 @@ def build(out_path):
     cp = doc.core_properties
     cp.author = "Felix Enrique"
     cp.last_modified_by = "Felix Enrique"
+
+    # Pastikan semua paragraf "Pengembangan lebih lanjut" di akhir bagian 1.5
+    # berformat teks biasa: tidak bold, tidak center, rata kiri/justify,
+    # sehingga menyatu dengan paragraf sebelumnya.
+    for p in doc.paragraphs:
+        if "Pengembangan lebih lanjut" in p.text:
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            for r in p.runs:
+                r.bold = False
 
     doc.save(str(out_path))
 
