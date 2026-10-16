@@ -393,18 +393,23 @@ DAMPAK82 = "Judul 1.5.2 menggambarkan dampak fungsional dan komersial prototipe:
 DAMPAK83 = "Penerapan peta zona dalam bentuk status per zona juga memberikan keluaran yang lebih operasional bagi pengelola. Selain itu, sistem dilengkapi arsip runtun waktu per zona dan dasbor dengan grafik 24 jam sehingga tren pertumbuhan tiap zona terpantau. Sementara itu, ambang status 25, 55, dan 80 persen beserta ambang kesehatan kuning 10 dan 25 persen serta cokelat 3 dan 8 persen dapat dikonfigurasi kembali mengikuti hasil validasi ahli."
 DAMPAK84 = "Secara fungsional, prototipe juga memiliki potensi untuk diterapkan pada konfigurasi akuaponik yang berbeda melalui proses penyesuaian parameter. Rentang HSV, ambang status, ambang kesehatan, serta parameter ketinggian kamera dapat dikonfigurasi kembali sesuai kebutuhan. Dengan demikian, arsitektur sistem tidak dibatasi hanya pada satu kondisi instalasi, meskipun penerapan pada sistem lain tetap memerlukan proses kalibrasi dan pengujian ulang."
 DAMPAK86 = "Dari sisi komersial, prototipe ini memiliki potensi untuk dikembangkan menjadi perangkat pendukung monitoring akuaponik yang menilai kelayakan panen dan kesehatan tanaman dalam satu sistem. Arsitektur yang menggunakan komputer papan tunggal, kamera, rumah kamera cetak tiga dimensi, dan konektivitas Internet of Things memungkinkan sistem dikembangkan secara modular sesuai kebutuhan pengguna dan skala instalasi."
-DAMPAK87 = "Pengembangan lebih lanjut dapat diarahkan pada penyederhanaan instalasi, peningkatan keandalan perangkat keras, pengembangan antarmuka pengguna, serta pengujian pada lebih banyak konfigurasi akuaponik. Dengan tahapan tersebut, prototipe dapat menjadi dasar pengembangan produk teknologi monitoring cerdas untuk kebutuhan pendidikan, penelitian, komunitas, maupun pelaku budidaya skala kecil dan menengah. Namun, penerapan secara komersial tetap memerlukan validasi tambahan untuk memastikan keandalan, konsistensi kinerja, kemudahan pemeliharaan, dan kesesuaian sistem terhadap kondisi operasional yang berbeda."
+DAMPAK87_HEADING = "1.5.3 Pengembangan lebih lanjut"
+DAMPAK87_BODY = ("Dapat diarahkan pada penyederhanaan instalasi, peningkatan keandalan perangkat keras, "
+                 "pengembangan antarmuka pengguna, serta pengujian pada lebih banyak konfigurasi akuaponik. "
+                 "Dengan tahapan tersebut, prototipe dapat menjadi dasar pengembangan produk teknologi "
+                 "monitoring cerdas untuk kebutuhan pendidikan, penelitian, komunitas, maupun pelaku "
+                 "budidaya skala kecil dan menengah. Namun, penerapan secara komersial tetap memerlukan "
+                 "validasi tambahan untuk memastikan keandalan, konsistensi kinerja, kemudahan pemeliharaan, "
+                 "dan kesesuaian sistem terhadap kondisi operasional yang berbeda.")
 
 
 def tahap3d(doc):
-    for i, teks in ((82, DAMPAK82), (83, DAMPAK83), (84, DAMPAK84), (86, DAMPAK86), (87, DAMPAK87)):
+    for i, teks in ((82, DAMPAK82), (83, DAMPAK83), (84, DAMPAK84), (86, DAMPAK86),
+                    (87, DAMPAK87_HEADING), (88, DAMPAK87_BODY)):
         set_text(doc.paragraphs[i], teks)
-    # Paragraf 87 (Pengembangan lebih lanjut): teks biasa, tidak bold, tidak center,
-    # rata kiri/ justify sehingga menyatu dengan paragraf sebelumnya di akhir bagian 1.5
-    p87 = doc.paragraphs[87]
-    p87.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    for r in p87.runs:
-        r.bold = False
+    # Paragraf 87 (1.5.3 Pengembangan lebih lanjut): jadi heading (Heading 3 ditetapkan
+    # oleh tahap_struktur_mirza melalui pola teks "^\d+\.\d+\.\d+\s"), jadi jangan
+    # diformat sebagai teks biasa non-bold/justify di sini.
     # Hapus sisa dampak akuaponik template (indeks 82-84 versi lama masih
     # terbaca sebagai teks baru? tidak -- yang bertahan adalah paragraf
     # TAMBAHAN di luar indeks tsb). Singkirkan paragraf template yang masih
@@ -1202,13 +1207,24 @@ def tahap7bspasi(doc):
         np_ = deepcopy(ps[i_blank]._p)
         ps[i_rumusan]._p.addprevious(np_)
     # Pastikan semua paragraf "Pengembangan lebih lanjut" di akhir bagian 1.5
-    # berformat teks biasa: tidak bold, tidak center, rata kiri/justify,
-    # sehingga menyatu dengan paragraf sebelumnya.
+    # yang BELUM jadi heading berformat teks biasa: tidak bold, tidak center,
+    # rata kiri/justify, sehingga menyatu dengan paragraf sebelumnya.
+    # Paragraf yang sudah berupa heading (1.5.3 Pengembangan lebih lanjut)
+    # ditangani oleh tahap_struktur_mirza (Heading 3) dan tidak diubah di sini.
     for p in ps:
         if "Pengembangan lebih lanjut" in p.text:
+            if p.style.style_id.startswith("Heading"):
+                continue
             p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             for r in p.runs:
                 r.bold = False
+    # Hapus duplikasi teks lama "Pengembangan lebih lanjut dapat diarahkan pada..."
+    # yang tersisa sebagai paragraf biasa (bukan heading), karena kini diformat
+    # sebagai sub-bab 1.5.3 di paragraf lain.
+    for p in list(ps):
+        if ("Pengembangan lebih lanjut dapat diarahkan pada" in p.text
+                and not p.style.style_id.startswith("Heading")):
+            delete_p(p)
 
 
 # ---------------- Tahap 8: rapikan Daftar Isi/Tabel/Gambar ----------------
@@ -1651,10 +1667,14 @@ def build(out_path):
     cp.last_modified_by = "Felix Enrique"
 
     # Pastikan semua paragraf "Pengembangan lebih lanjut" di akhir bagian 1.5
-    # berformat teks biasa: tidak bold, tidak center, rata kiri/justify,
-    # sehingga menyatu dengan paragraf sebelumnya.
+    # yang BELUM jadi heading berformat teks biasa: tidak bold, tidak center,
+    # rata kiri/justify, sehingga menyatu dengan paragraf sebelumnya.
+    # Paragraf yang sudah berupa heading (1.5.3 Pengembangan lebih lanjut)
+    # ditangani oleh tahap_struktur_mirza (Heading 3) dan tidak diubah di sini.
     for p in doc.paragraphs:
         if "Pengembangan lebih lanjut" in p.text:
+            if p.style.style_id.startswith("Heading"):
+                continue
             p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             for r in p.runs:
                 r.bold = False
