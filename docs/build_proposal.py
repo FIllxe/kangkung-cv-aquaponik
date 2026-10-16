@@ -175,7 +175,76 @@ def add_formula(doc, ref_idx, segs):
         re_.append(te)
         np_.append(re_)
     doc.element.body.append(np_)
-    return Paragraph(np_, doc)
+    p = Paragraph(np_, doc)
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER  # rumus matematis rata tengah
+    return p
+
+
+# ---------------- Font Times New Roman untuk seluruh dokumen (termasuk TOC) ----------------
+def set_font_times_new_roman(doc):
+    """Paksa setiap run di semua paragraf dan sel tabel jadi Times New Roman,
+    sehingga TOC, daftar pustaka, body, caption, dan tabel seragam satu font."""
+    for p in doc.paragraphs:
+        for r in p.runs:
+            r.font.name = "Times New Roman"
+            rPr = r._r.find(qn("w:rPr"))
+            if rPr is not None:
+                rf = rPr.find(qn("w:rFonts"))
+                if rf is None:
+                    rf = OxmlElement("w:rFonts")
+                    rPr.append(rf)
+                rf.set(qn("w:ascii"), "Times New Roman")
+                rf.set(qn("w:hAnsi"), "Times New Roman")
+                rf.set(qn("w:cs"), "Times New Roman")
+    for t in doc.tables:
+        for row in t.rows:
+            for cell in row.cells:
+                for pp in cell.paragraphs:
+                    for r in pp.runs:
+                        r.font.name = "Times New Roman"
+                        rPr = r._r.find(qn("w:rPr"))
+                        if rPr is not None:
+                            rf = rPr.find(qn("w:rFonts"))
+                            if rf is None:
+                                rf = OxmlElement("w:rFonts")
+                                rPr.append(rf)
+                            rf.set(qn("w:ascii"), "Times New Roman")
+                            rf.set(qn("w:hAnsi"), "Times New Roman")
+                            rf.set(qn("w:cs"), "Times New Roman")
+
+
+# ---------------- Normalisasi judul 1.5.2 (perbaiki jika terlalu panjang) ----------------
+JUDUL_152_SHORT = "1.5.2  Dampak Fungsional dan Komersial"
+
+
+def normalisasi_judul_152(doc):
+    """Cari heading yang dimulai '1.5.2' dan pendekatkan jika terlalu panjang,
+    agar tak membentang terlalu lebar di halaman dan TOC."""
+    for p in doc.paragraphs:
+        t = p.text.strip()
+        if t.startswith("1.5.2") and len(t) > len(JUDUL_152_SHORT):
+            set_text(p, JUDUL_152_SHORT)
+            break
+
+
+# ---------------- Rapihkan sitasi: entri Daftar Pustaka selalu diawali [n] ----------------
+def rapihkan_sitasi(doc):
+    """Pastikan setiap entri Daftar Pustaka dimulai dengan [n] di posisi awal
+    (tidak ada spasi/teks di depan nomor sitasi), sehingga tak ada sitasi
+    yang tak terstruktur."""
+    i_pus = next((i for i, p in enumerate(doc.paragraphs)
+                  if p.text.strip() == "DAFTAR PUSTAKA"), None)
+    if i_pus is None:
+        return
+    for p in doc.paragraphs[i_pus + 1:]:
+        t = p.text.strip()
+        if not t:
+            continue
+        if re.match(r"^(BAB |LAMPIRAN|\d+\.\d+)", t):
+            break
+        m = re.match(r"^\s*(\[\d+\]\s+.*)", t)
+        if m and not t.startswith("["):
+            set_text(p, m.group(1))
 
 
 # ---------------- helper penomoran heading eksplisit (lihat DOK di tahap baru) ----------------
@@ -1379,6 +1448,9 @@ TAHAP = [
  ("tN struktur-mirza", tahap_struktur_mirza),
  ("tN judul-persetujuan", tahap_judul_persetujuan),
  ("tN spasi-rafly", tahap_spasi_rafly),
+ ("tN font-times-new-roman", set_font_times_new_roman),
+ ("tN judul-1.5.2", normalisasi_judul_152),
+ ("tN rapihkan-sitasi", rapihkan_sitasi),
 ]
 
 
