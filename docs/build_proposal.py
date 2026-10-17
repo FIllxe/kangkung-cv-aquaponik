@@ -213,20 +213,6 @@ def set_font_times_new_roman(doc):
                             rf.set(qn("w:cs"), "Times New Roman")
 
 
-# ---------------- Normalisasi judul 1.5.2 (perbaiki jika terlalu panjang) ----------------
-JUDUL_152_SHORT = "1.5.2  Dampak Fungsional"
-
-
-def normalisasi_judul_152(doc):
-    """Cari heading yang dimulai '1.5.2' dan pendekatkan jika terlalu panjang,
-    agar tak membentang terlalu lebar di halaman dan TOC."""
-    for p in doc.paragraphs:
-        t = p.text.strip()
-        if t.startswith("1.5.2") and len(t) > len(JUDUL_152_SHORT):
-            set_text(p, JUDUL_152_SHORT)
-            break
-
-
 # ---------------- Rapihkan sitasi: entri Daftar Pustaka selalu diawali [n] ----------------
 def rapihkan_sitasi(doc):
     """Pastikan setiap entri Daftar Pustaka dimulai dengan [n] di posisi awal
@@ -389,11 +375,12 @@ def tahap3c(doc):
         elif tx.startswith("\tBerdasarkan latar belakang yang telah diuraikan, rumusan masalah dalam perancangan prototipe ini adalah sebagai berikut"):
             delete_p(p)
 # ---------------- Tahap 3d (= bangun_felix_t3d.py): dampak ----------------
-DAMPAK82 = "Judul 1.5.2 menggambarkan dampak fungsional dan komersial prototipe: dampak fungsional berkaitan dengan manfaat operasional sistem dalam mendukung keputusan panen secara lebih objektif dan terukur, sedangkan dampak komersial berkaitan dengan potensi sistem dikembangkan menjadi produk siap pakai bagi pelaku budidaya akuaponik. Prototipe yang dirancang memiliki potensi memberikan dampak fungsional pada proses pengelolaan budidaya akuaponik, khususnya dalam menentukan kesiapan panen secara lebih terukur. Keputusan tidak hanya didasarkan pada pengamatan visual, tetapi menggunakan liputan kanopi per zona, status kesehatan daun, dan Indeks Stres Tanaman atau Plant Stress Index (PSI) sebagai keluaran sistem. Peta 24 zona memungkinkan panen selektif pada zona yang siap sedangkan zona yang belum siap dibiarkan tumbuh, sedangkan status sehat, waspada, dan sakit menjadi dasar pemeriksaan lanjutan."
-DAMPAK83 = "Penerapan peta zona dalam bentuk status per zona juga memberikan keluaran yang lebih operasional bagi pengelola. Selain itu, sistem dilengkapi arsip runtun waktu per zona dan dasbor dengan grafik 24 jam sehingga tren pertumbuhan tiap zona terpantau. Sementara itu, ambang status 25, 55, dan 80 persen beserta ambang kesehatan kuning 10 dan 25 persen serta cokelat 3 dan 8 persen dapat dikonfigurasi kembali mengikuti hasil validasi ahli."
+LABEL_151 = "1.5.1  Potensi Dampak Fungsional"
+LABEL_152 = "1.5.2  Potensi Dampak Komersial"
+DAMPAK82 = "Bagian ini menggambarkan dampak fungsional dan komersial prototipe: dampak fungsional berkaitan dengan manfaat operasional sistem dalam mendukung keputusan panen secara lebih objektif dan terukur, sedangkan dampak komersial berkaitan dengan potensi sistem dikembangkan menjadi produk siap pakai bagi pelaku budidaya akuaponik. Prototipe yang dirancang memiliki potensi memberikan dampak fungsional pada proses pengelolaan budidaya akuaponik, khususnya dalam menentukan kesiapan panen secara lebih terukur. Keputusan tidak hanya didasarkan pada pengamatan visual, tetapi menggunakan liputan kanopi per zona, status kesehatan daun, dan Indeks Stres Tanaman atau Plant Stress Index (PSI) sebagai keluaran sistem. Peta 24 zona memungkinkan panen selektif pada zona yang siap sedangkan zona yang belum siap dibiarkan tumbuh, sedangkan status sehat, waspada, dan sakit menjadi dasar pemeriksaan lanjutan."
 DAMPAK84 = "Secara fungsional, prototipe juga memiliki potensi untuk diterapkan pada konfigurasi akuaponik yang berbeda melalui proses penyesuaian parameter. Rentang HSV, ambang status, ambang kesehatan, serta parameter ketinggian kamera dapat dikonfigurasi kembali sesuai kebutuhan. Dengan demikian, arsitektur sistem tidak dibatasi hanya pada satu kondisi instalasi, meskipun penerapan pada sistem lain tetap memerlukan proses kalibrasi dan pengujian ulang."
-DAMPAK86 = "Dari sisi komersial, prototipe ini memiliki potensi untuk dikembangkan menjadi perangkat pendukung monitoring akuaponik yang menilai kelayakan panen dan kesehatan tanaman dalam satu sistem. Arsitektur yang menggunakan komputer papan tunggal, kamera, rumah kamera cetak tiga dimensi, dan konektivitas Internet of Things memungkinkan sistem dikembangkan secara modular sesuai kebutuhan pengguna dan skala instalasi."
-DAMPAK87_HEADING = "1.5.3 Pengembangan lebih lanjut"
+DAMPAK86 = "Dari sisi komersial, prototipe ini memiliki potensi untuk dikembangkan menjadi perangkat pendukung monitoring akuaponik yang menilai kelayakan panen dan kesehatan tanaman dalam satu sistem. Arsitektur yang menggunakan komputer papan tunggal, kamera, rumah kamera cetak tiga dimensi, dan konektivitas Internet of Things memungkinkan sistem dikembangkan secara modular sesuai kebutuhan pengguna dan skala instalasi. Perbandingan prototipe terhadap produk pembanding lain diringkas pada Tabel 1.1."
+DAMPAK87_HEADING = "1.5.3  Pengembangan lebih lanjut"
 DAMPAK87_BODY = ("Dapat diarahkan pada penyederhanaan instalasi, peningkatan keandalan perangkat keras, "
                  "pengembangan antarmuka pengguna, serta pengujian pada lebih banyak konfigurasi akuaponik. "
                  "Dengan tahapan tersebut, prototipe dapat menjadi dasar pengembangan produk teknologi "
@@ -404,10 +391,28 @@ DAMPAK87_BODY = ("Dapat diarahkan pada penyederhanaan instalasi, peningkatan kea
 
 
 def tahap3d(doc):
-    for i, teks in ((82, DAMPAK82), (83, DAMPAK83), (84, DAMPAK84), (86, DAMPAK86),
-                    (87, DAMPAK87_HEADING), (88, DAMPAK87_BODY)):
+    for i, teks in ((79, LABEL_151), (82, DAMPAK82), (83, DAMPAK84),
+                    (84, LABEL_152), (85, DAMPAK86), (86, DAMPAK87_HEADING),
+                    (87, DAMPAK87_BODY)):
         set_text(doc.paragraphs[i], teks)
-    # Paragraf 87 (1.5.3 Pengembangan lebih lanjut): jadi heading (Heading 3 ditetapkan
+    # Rapikan format body yang menimpa paragraf template berformat khusus:
+    # DAMPAK84 (idx 83) menimpa LABEL template (bold + indent gantung),
+    # DAMPAK87_BODY (idx 87) menimpa caption template (center + bold).
+    # Biar konsisten dgn body lain: JUSTIFY non-bold; first-line indent 18pt
+    # diberikan otomatis oleh tahap_spasi_rafly utk paragraf JUSTIFY.
+    for i in (83, 87):
+        pb = doc.paragraphs[i]
+        pb.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        for r in pb.runs:
+            r.bold = False
+    # Sisa numbering list warisan paragraf label template di body 1.5.1
+    # (idx 83) bikin tahap_spasi_rafly melewatkannya (syarat numPr None)
+    # sehingga indent gantung 567 twips tertinggal -> hapus numPr-nya.
+    strip_numbering(doc.paragraphs[83])
+    # Heading 1.5.1 (idx 79) juga warisi hanging 567 dari label template
+    # -> bersihkan supaya tampil seperti heading 1.5.2/1.5.3 lainnya.
+    doc.paragraphs[79].paragraph_format.first_line_indent = None
+    # Paragraf 86 (1.5.3 Pengembangan lebih lanjut): jadi heading (Heading 3 ditetapkan
     # oleh tahap_struktur_mirza melalui pola teks "^\d+\.\d+\.\d+\s"), jadi jangan
     # diformat sebagai teks biasa non-bold/justify di sini.
     # Hapus sisa dampak akuaponik template (indeks 82-84 versi lama masih
@@ -464,7 +469,7 @@ def tahap4a(doc):
 # ---------------- Tahap 4b (= bangun_felix_t4b.py): Tinjauan + Tabel 2.1 ----------------
 IT4B = IT4A + ["approxPolyDP"]
 TINJ2 = "Hameed dkk. [11] menentukan ambang vegetasi dari histogram Hue sehingga adaptif terhadap cahaya. Gagasan tersebut dipakai sebagai kerabat faktor adaptasi f pada prototipe ini. Yang dkk. [15] memakai pohon keputusan HSV untuk identifikasi kehijauan dan Barbedo [16] memetakan teknik citra digital untuk deteksi dan kuantifikasi penyakit daun berbasis warna. Kedua kajian tersebut mendukung pemisahan kuning dan cokelat sebagai gejala berbeda. Tovar dkk. [17] memakai Raspberry Pi untuk fenotipe tanaman sehingga mendukung pilihan deploy ringan. Perbandingan posisi penelitian ini terhadap tujuh kajian tersebut diringkas pada Tabel 2.1. Celah yang diisi prototipe ini adalah gabungan grid panen 4×6, adaptasi iluminasi tanpa pembelajaran mendalam, dan skor stres siap kendali dalam satu paket lapangan."
-TINJ3 = "Kajian pendukung lain diperiksa untuk memperkuat posisi prototipe ini. Zhang dkk. [18] mendeteksi baris tanaman dari citra tampak atas dengan pengelompokan posisi dan lintasan terpendek, yang sejalan dengan deteksi bed pada Bagian 2.2.1. Liakos dkk. [19] merangkum penerapan pembelajaran mesin pada pertanian dan Kamilaris dan Prenafeta-Boldú [20] merangkum penerapan pembelajaran mendalam; kedua tinjauan tersebut menegaskan bahwa pendekatan berbasis data membutuhkan pelatihan berlabel dalam jumlah besar. Perez-Marin dkk. [21] memprediksi pertumbuhan dan hasil panen tanaman hortikultura dengan jaringan saraf temporal, Mane dkk. [22] memperkirakan tinggi tanaman dan luas tajuk dari titik LiDAR, serta Athanasiadis dkk. [23] meramalkan pertumbuhan tanaman dengan autoencoder dan wavelet. Seluruh pendekatan pembelajaran mendalam tersebut bergantung pada data pelatihan berlabel yang belum tersedia pada prototipe ini sehingga deteksi tepi dan ambang warna tetap dipilih."
+TINJ3 = "Kajian pendukung lain diperiksa untuk memperkuat posisi prototipe ini. Zhang dkk. [18] mendeteksi baris tanaman dari citra tampak atas dengan pengelompokan posisi dan lintasan terpendek, yang sejalan dengan deteksi bed pada Bagian 2.2.1. Liakos dkk. [19] merangkum penerapan pembelajaran mesin pada pertanian dan Kamilaris dan Prenafeta-Boldú [20] merangkum penerapan pembelajaran mendalam; kedua tinjauan tersebut menegaskan bahwa pendekatan berbasis data membutuhkan pelatihan berlabel dalam jumlah besar. Perez-Marin dkk. [21] memprediksi pertumbuhan dan hasil panen tanaman hortikultura dengan jaringan saraf temporal, Mane dkk. [22] memperkirakan tinggi tanaman dan luas tajuk dari titik Light Detection and Ranging (LiDAR), serta Athanasiadis dkk. [23] meramalkan pertumbuhan tanaman dengan autoencoder dan wavelet. Seluruh pendekatan pembelajaran mendalam tersebut bergantung pada data pelatihan berlabel yang belum tersedia pada prototipe ini sehingga deteksi tepi dan ambang warna tetap dipilih."
 TABEL21 = [
  ["Wan dkk. [8]", "Tepi + citra akuaponik", "Status tumbuh", "Tanpa grid zona dan adaptasi cahaya"],
  ["Abbasi dkk. [9]", "Warna daun selada", "Klorosis", "Satu gejala, tanpa grid dan PSI"],
@@ -478,7 +483,7 @@ TABEL21 = [
 
 def tahap4b(doc):
     add_para(doc, 33, TINJ2, False, IT4B)
-    add_para(doc, 33, TINJ3, False, IT4B + ["autoencoder", "wavelet", "LiDAR"])
+    add_para(doc, 33, TINJ3, False, IT4B + ["autoencoder", "wavelet", "Light Detection and Ranging"])
     add_para(doc, 89, "Tabel 2.1  Perbandingan penelitian terdahulu dengan penelitian yang diusulkan.", True, ())
     t = doc.add_table(rows=8, cols=4)
     t.style = "Table Grid"
@@ -618,7 +623,7 @@ def tahap5e(doc):
         for j, v in enumerate(row):
             t2.cell(i, j).text = v
 # ---------------- Tahap 5b (= t5b.py): arsitektur + Gambar 3.1 ----------------
-ARSITEK = "Sistem dirancang sebagai sensor tanaman otomatis berlima tahap. Tahap akuisisi memakai kamera CSI atau HP secara top-down dengan pemanasan pajanan otomatis. Tahap visi di komputer papan tunggal menjalankan deteksi bed, warp, grid 4×6, liputan, kuning, cokelat, dan PSI seperti Persamaan 2.3 sampai 2.7. Tahap Firebase memakai koleksi bed_readings skema v1.1 dengan payload 2-3 KB tiap 10 menit. Tahap dasbor menampilkan heatmap 4×6, grafik 24 jam, distribusi status, dan kartu PSI secara baca saja. Tahap kendali membaca PSI, PSI maksimum, dan jumlah zona sakit menjadi keputusan pompa dengan persetujuan manusia. Perancangan sensor, komputer papan tunggal, dan aktuator dalam satu skema terkendali sejalan dengan tren otomasi greenhouse yang dirangkum Shamshiri dkk. [25]. Blok diagram pada Gambar 3.1 meringkas aliran tersebut. Kode sumber pipeline, skema Firebase, dan dasbor tersedia pada Lampiran 1."
+ARSITEK = "Sistem dirancang sebagai sensor tanaman otomatis berlima tahap. Tahap akuisisi memakai kamera CSI atau HP secara top-down dengan pemanasan pajanan otomatis. Tahap visi di komputer papan tunggal menjalankan deteksi bed, warp, grid 4×6, liputan, kuning, cokelat, dan PSI seperti Persamaan 2.3 sampai 2.7. Tahap Firebase memakai koleksi bed_readings skema v1.1 dengan payload 2-3 KB tiap 10 menit. Tahap dasbor menampilkan heatmap 4×6, grafik 24 jam, distribusi status, dan kartu PSI secara baca saja. Tahap kendali membaca PSI, PSI maksimum, dan jumlah zona sakit menjadi keputusan pompa dengan persetujuan manusia. Perancangan sensor, komputer papan tunggal, dan aktuator dalam satu skema terkendali sejalan dengan tren otomasi greenhouse yang dirangkum Shamshiri dkk. [25]. Blok diagram pada Gambar 3.1 meringkas aliran tersebut. Kode sumber pipeline, skema Firebase, dan dasbor tersedia pada Lampiran 1, biodata penulis pada Lampiran 2, serta sketsa rumah kamera pada Lampiran 3."
 KONTRAK = "Kontrak antar tahap memakai fuzzy_input berisi kuning_pct, coklat_pct, zona_sakit, psi, psi_maks, dan psi_versi. Aturan keselamatan menetapkan data basi di atas 30 menit ditolak, nilai hilang menahan tindakan, dan status usulan wajib menunggu persetujuan manusia sehingga tidak ada aktuasi otomatis."
 
 
@@ -647,7 +652,7 @@ def tahap5c(doc):
 # ---------------- Tahap 5d (= t5d.py): prinsip kerja + Gambar 3.4/3.5, metrik + Tabel 3.3 ----------------
 KERJA = "Prinsip kerja mengikuti formulasi Bab 2 dan dirujuk eksplisit tiap langkah. Deteksi bed memakai Persamaan 2.1 dan 2.2 untuk tepi, lalu aproksimasi quad, lalu Persamaan 2.3 untuk warp. Segmentasi memakai Persamaan 2.4 untuk maska hijau serta rentang kuning dan cokelat yang dijaga statis agar diagnosis tegas. Faktor adaptasi Bagian 2.2.3 menggeser ambang S dan V lalu sudut diratakan dengan Persamaan 2.5. Tiap zona dihitung liputan, kuning, dan cokelat terhadap piksel tanaman, lalu status panen dan status kesehatan ditetapkan, lalu PSI dan PSI maksimum dihitung dengan Persamaan 2.6 dan 2.7. Zona dengan kanopi di bawah 30 persen luas zona berstatus tidak dinilai agar artefak tepi warp tidak memicu alarm."
 BUKTI = "Bukti reproduksibilitas memakai data asli. Gambar 3.4 membandingkan frame mentah HP IMG_5159 dengan keluaran pipeline pada frame yang sama, sedangkan Gambar 3.5 membandingkan frame video lapangan IMG_5388 dengan keluaran segmentasi HSV adaptif pada frame yang sama. Kedua gambar tersebut membuktikan masukan dan keluaran berasal dari data lapangan, bukan simulasi."
-METRIK = "Metrik terdiri atas jitter sudut dalam piksel untuk stabilitas temporal, liputan rata-rata dan simpangan baku dalam persen untuk tren tumbuh, serta presisi, recall, F1 (harmonic mean presisi dan recall), dan Intersection over Union (IoU) memakai Persamaan 2.8 dan 2.9 untuk akurasi segmentasi terhadap mask ground truth. Sebagai pembanding, segmentasi HSV diuji terhadap indeks vegetasi ExG dan ambang Otsu-Hue mengikuti prosedur Netto dkk. [26] sehingga keunggulan metode dapat diuji pada data lapangan yang sama. Metrik sistem terdiri atas keberhasilan siklus burn-in, suhu System on Chip (SoC) dalam °C, dan keterbacaan snapshot. Skenario pada Tabel 3.3 menguji tiap rumusan masalah secara kuantitatif dan divisualkan dengan plot pengujian agar pembaca tidak menelusuri angka mentah satu per satu."
+METRIK = "Metrik terdiri atas jitter sudut dalam piksel untuk stabilitas temporal, liputan rata-rata dan simpangan baku dalam persen untuk tren tumbuh, serta presisi, recall, F1 (harmonic mean presisi dan recall), dan Intersection over Union (IoU) memakai Persamaan 2.8 dan 2.9 untuk akurasi segmentasi terhadap mask ground truth. Sebagai pembanding, segmentasi HSV diuji terhadap indeks vegetasi Excess Green (ExG) dan ambang Otsu-Hue mengikuti prosedur Netto dkk. [26] sehingga keunggulan metode dapat diuji pada data lapangan yang sama. Metrik sistem terdiri atas keberhasilan siklus burn-in, suhu System on Chip (SoC) dalam °C, dan keterbacaan snapshot. Skenario pada Tabel 3.3 menguji tiap rumusan masalah secara kuantitatif dan divisualkan dengan plot pengujian agar pembaca tidak menelusuri angka mentah satu per satu."
 SKEN = [
  ["Stabilitas iluminasi", "18 video pagi/siang/sore", "Jitter turun >=40 persen, liputan stabil", "Persamaan 2.5"],
  ["Akurasi segmentasi", "5 mask ground truth", "F1 0,85-0,95, IoU per kelas", "Persamaan 2.8-2.9"],
@@ -670,7 +675,7 @@ def tahap5d1(doc):
 
 def tahap5d2(doc):
     add_para(doc, 32, "3.5  Metrik dan Skenario Pengujian", bold=True)
-    add_para(doc, 33, METRIK, itw=["recall", "Intersection over Union", "ground truth", "ExG"])
+    add_para(doc, 33, METRIK, itw=["recall", "Intersection over Union", "ground truth", "Excess Green"])
     add_para(doc, 89, "Tabel 3.3  Skenario pengujian kelayakan prototipe.", bold=True)
     t = doc.add_table(rows=6, cols=4)
     t.style = "Table Grid"
@@ -944,6 +949,17 @@ def tahap_judul_persetujuan(doc):
     spasi 1,5) dan baris pendukung 12pt eksplisit. Teks & identitas (nama, NIM,
     dosen pembimbing, kampus) TIDAK diubah - hanya format. Berbasis teks =>
     kebal drift indeks."""
+    # Porting editan manual halaman judul: gabung baris fakultas+universitas
+    # dan hapus dua paragraf kosong di atas blok PROGRAM STUDI.
+    i_prog = next((i for i, p in enumerate(doc.paragraphs)
+                   if p.text.startswith('PROGRAM STUDI')), None)
+    if i_prog is not None:
+        p_prog = doc.paragraphs[i_prog]
+        set_text(p_prog, 'PROGRAM STUDI TEKNIK KOMPUTER\nFAKULTAS TEKNIK UNIVERSITAS NEGERI SEMARANG\n2026')
+        for _ in range(2):
+            prev = p_prog._p.getprevious()
+            if prev is not None and prev.tag == qn('w:p') and not Paragraph(prev, doc).text.strip():
+                prev.getparent().remove(prev)
     i_persetujuan = next(i for i, p in enumerate(doc.paragraphs)
                          if p.text.strip() == "PERSETUJUAN PEMBIMBING")
     for p in doc.paragraphs[:i_persetujuan]:
@@ -1249,47 +1265,50 @@ DAFTAR_ISI = [
     ("DAFTAR ISTILAH DAN SINGKATAN", "vii", 0),
     ("BAB I  PENDAHULUAN", "1", 0),
     ("1.1  Latar Belakang", "1", 1),
-    ("1.2  Rumusan Masalah", "2", 1),
+    ("1.2  Rumusan Masalah", "3", 1),
     ("1.3  Tujuan Prototipe", "3", 1),
-    ("1.4  Manfaat Prototipe", "3", 1),
-    ("1.5  Potensi Dampak Fungsional/Komersial", "5", 1),
-    ("BAB II  KAJIAN PUSTAKA", "7", 0),
-    ("2.1  Tinjauan Pustaka", "7", 1),
-    ("2.2  Landasan Teoretik", "8", 1),
-    ("2.2.1  Deteksi Tepi Canny dan Aproksimasi Quad", "8", 2),
-    ("2.2.2  Ruang Warna HSV dan Segmentasi Vegetasi", "8", 2),
-    ("2.2.3  Adaptasi Iluminasi dan Perata Temporal EMA", "9", 2),
-    ("2.2.4  Liputan Kanopi dan Indeks Stres Tanaman", "9", 2),
-    ("2.2.5  Metrik Evaluasi Segmentasi", "9", 2),
-    ("BAB III  METODE PELAKSANAAN", "11", 0),
-    ("3.1  Pendekatan Perancangan", "11", 1),
-    ("3.2  Lokasi dan Waktu", "11", 1),
-    ("3.3  Prosedur Perancangan", "11", 1),
-    ("3.3.1  Arsitektur Sistem", "12", 2),
-    ("3.3.2  Diagram Alir", "12", 2),
-    ("3.3.3  Skema Pemasangan", "13", 2),
-    ("3.3.4  Prinsip Kerja Algoritma", "14", 2),
-    ("3.4  Bahan dan Alat", "14", 1),
-    ("3.5  Metrik dan Skenario Pengujian", "15", 1),
-    ("DAFTAR PUSTAKA", "17", 0),
-    ("LAMPIRAN", "19", 0),
+    ("1.4  Manfaat Prototipe", "4", 1),
+    ("1.5  Potensi Dampak Fungsional/Komersial", "6", 1),
+    ("1.5.1  Potensi Dampak Fungsional", "6", 1),
+    ("1.5.2  Potensi Dampak Komersial", "7", 1),
+    ("1.5.3  Pengembangan lebih lanjut", "7", 1),
+    ("BAB II  KAJIAN PUSTAKA", "9", 0),
+    ("2.1  Tinjauan Pustaka", "9", 1),
+    ("2.2  Landasan Teoretik", "10", 1),
+    ("2.2.1  Deteksi Tepi Canny dan Aproksimasi Quad", "10", 2),
+    ("2.2.2  Ruang Warna HSV dan Segmentasi Vegetasi", "11", 2),
+    ("2.2.3  Adaptasi Iluminasi dan Perata Temporal EMA", "11", 2),
+    ("2.2.4  Liputan Kanopi dan Indeks Stres Tanaman", "11", 2),
+    ("2.2.5  Metrik Evaluasi Segmentasi", "12", 2),
+    ("BAB III  METODE PELAKSANAAN", "13", 0),
+    ("3.1  Pendekatan Perancangan", "13", 1),
+    ("3.2  Lokasi dan Waktu", "13", 1),
+    ("3.3  Prosedur Perancangan", "13", 1),
+    ("3.3.1  Arsitektur Sistem", "14", 2),
+    ("3.3.2  Diagram Alir", "15", 2),
+    ("3.3.3  Skema Pemasangan", "16", 2),
+    ("3.3.4  Prinsip Kerja Algoritma", "16", 2),
+    ("3.4  Bahan dan Alat", "17", 1),
+    ("3.5  Metrik dan Skenario Pengujian", "18", 1),
+    ("DAFTAR PUSTAKA", "19", 0),
+    ("LAMPIRAN", "21", 0),
 ]
+
 DAFTAR_TABEL = [
-    ("Tabel 1.1  Perbandingan Dengan Produk Lain", "6"),
-    ("Tabel 2.1  Perbandingan Penelitian Terdahulu", "8"),
-    ("Tabel 3.1  Daftar Perangkat Keras", "15"),
-    ("Tabel 3.2  Daftar Perangkat Lunak", "15"),
-    ("Tabel 3.3  Skenario Pengujian Kelayakan Prototipe", "15"),
+    ("Tabel 1.1  Perbandingan Dengan Produk Lain", "7"),
+    ("Tabel 2.1  Perbandingan Penelitian Terdahulu", "9"),
+    ("Tabel 3.1  Daftar Perangkat Keras", "17"),
+    ("Tabel 3.2  Daftar Perangkat Lunak", "17"),
+    ("Tabel 3.3  Skenario Pengujian Kelayakan Prototipe", "18"),
 ]
+
 DAFTAR_GAMBAR = [
-    ("Gambar 3.1  Blok Diagram Sistem", "12"),
-    ("Gambar 3.2  Diagram Alir Pipeline", "13"),
-    ("Gambar 3.3  Skema Pemasangan Kamera", "14"),
-    ("Gambar 3.4  Bukti Asli Frame HP vs Pipeline", "14"),
-    ("Gambar 3.5  Bukti Asli Frame Video vs Segmentasi", "14"),
+    ("Gambar 3.1  Blok Diagram Sistem", "14"),
+    ("Gambar 3.2  Diagram Alir Pipeline", "15"),
+    ("Gambar 3.3  Skema Pemasangan Kamera", "16"),
+    ("Gambar 3.4  Bukti Asli Frame HP vs Pipeline", "16"),
+    ("Gambar 3.5  Bukti Asli Frame Video vs Segmentasi", "17"),
 ]
-
-
 def _set_entry(p, judul, halaman, level=0):
     """Ubah paragraf entri daftar menjadi: judul <TAB-kanan-dot-leader> halaman.
 
@@ -1479,7 +1498,6 @@ TAHAP = [
  ("tN judul-persetujuan", tahap_judul_persetujuan),
  ("tN spasi-rafly", tahap_spasi_rafly),
  ("tN font-times-new-roman", set_font_times_new_roman),
- ("tN judul-1.5.2", normalisasi_judul_152),
  ("tN rapihkan-sitasi", rapihkan_sitasi),
 ]
 
