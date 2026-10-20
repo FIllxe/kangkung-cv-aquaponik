@@ -7,10 +7,10 @@ persis dari template `docs/kirim felix.docx` sehingga hasilnya identik.
 Urutan tahap (nama skrip asal dicantumkan di tiap fungsi):
   t1      judul halaman depan (pola run-per-run template dipertahankan)
   t2      profil + persetujuan (nama/NIM/judul, Tabel 0)
-  t3a-t3e Bab 1 penuh (latar P33-37, rumusan/tujuan, manfaat, dampak, Tabel 1.1)
+  t3a-t3f Bab 1 penuh (latar P33-37, rumusan/tujuan, manfaat, dampak, Tabel 1.1, Batasan Masalah)
   t4a-t4d Bab 2 (Tinjauan Pustaka + Tabel 2.1, Landasan Teoretik 2.2.1-2.2.5,
           Persamaan 2.1-2.9)
-  t5a-t5d Bab 3 (3.1 lokasi, 3.2 bahan/alat + Tabel 3.1/3.2, 3.3 arsitektur +
+  t5a-t5f Bab 3 (3.1 lokasi, 3.2 bahan/alat + Tabel 3.1/3.2, 3.3 arsitektur +
           Gambar 3.1, 3.4 diagram alir + Gambar 3.2, 3.5 skema + Gambar 3.3,
           3.6 prinsip kerja + Gambar 3.4/3.5, 3.7 metrik + Tabel 3.3)
   t6b     Daftar Isi statis (t6.py gagal sebelum save -> digantikan t6b+t6c)
@@ -40,6 +40,7 @@ from pathlib import Path
 from docx import Document
 from docx.enum.text import (WD_ALIGN_PARAGRAPH, WD_BREAK, WD_TAB_ALIGNMENT,
                             WD_TAB_LEADER)
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
@@ -52,6 +53,36 @@ OUT = ROOT / "docs" / "PROPOSAL_PROTOTIPE_FELIX_ENRIQUE_2305110019.docx"
 JUDUL = ("PENGEMBANGAN SISTEM MONITORING KELAYAKAN PANEN PADA BUDIDAYA "
          "AKUAPONIK DENGAN TEKNIK SEGMENTASI WARNA HSV")
 XML_SPACE = "{http://www.w3.org/XML/1998/namespace}space"
+
+# ---------------- snapshot pola paragraf template ----------------
+# Dokumen hidup berubah saat tahap berjalan (halaman depan dihapus, entri TOC
+# disisipkan), sehingga indeks paragraf template BERGESER. add_para()/
+# add_formula() lalu mengklon paragraf yang salah (mis. "DAFTAR GAMBAR").
+# Solusi: simpan salinan XML pola template saat dokumen baru dibuka, lalu
+# add_para() selalu memakai salinan itu - bukan indeks dokumen live.
+TPL_SNAP = {}
+
+
+def snapshot_tpl(doc, idxs=(32, 33, 89)):
+    """Simpan salinan XML paragraf template pada indeks-indeks penting."""
+    TPL_SNAP.clear()
+    for i in idxs:
+        TPL_SNAP[i] = deepcopy(doc.paragraphs[i]._p)
+
+
+def tpl_ref(doc, ref):
+    """Kembalikan objek paragraf sumber format.
+
+    ref boleh int (indeks template) atau objek Paragraph. Bila indeks ada di
+    TPL_SNAP, pakai salinan template (stabil); selain itu pakai dokumen live.
+    """
+    if not isinstance(ref, int):
+        return ref
+    el = TPL_SNAP.get(ref)
+    if el is not None:
+        return Paragraph(deepcopy(el), doc)
+    return doc.paragraphs[ref]
+
 
 
 # ---------------- helper format (semantik identik dgn skrip asal) ----------------
@@ -105,8 +136,14 @@ def ital(p, words):
 
 def add_para(doc, ref_idx, text, bold=False, itw=()):
     """Klon pola paragraf template ref_idx, isi teks baru, append ke body."""
-    r0 = doc.paragraphs[ref_idx]
+    r0 = tpl_ref(doc, ref_idx)
     np_ = deepcopy(r0._p)
+    # Buang sectPr dari template agar tidak menumpuk di setiap paragraf klon.
+    # Section break hanya dipasang secara eksplisit oleh tahap_daftar_rapi.
+    pPr = np_.find(qn("w:pPr"))
+    if pPr is not None:
+        for sect in pPr.findall(qn("w:sectPr")):
+            pPr.remove(sect)
     for r in np_.xpath(".//w:r"):
         r.getparent().remove(r)
     base_pr = []
@@ -139,13 +176,65 @@ def add_para(doc, ref_idx, text, bold=False, itw=()):
     return Paragraph(np_, doc)
 
 
+# ---------------- helper hyperlink (untuk DOI pada Daftar Pustaka) ----------------
+# Word menyimpan hyperlink eksternal sebagai <w:hyperlink r:id="rIdN"> dengan
+# relasi eksternal (TargetMode="External") di document.xml.rels. Teks link tetap
+# dibaca normal oleh python-docx (w:hyperlink ikut di w:r | w:hyperlink), sehingga
+# verifikasi nomor [n] & isi sitasi tidak berubah.
+def _make_run(text, rpr_template=None):
+    """Buat elemen <w:r> berisi teks, opsional menyalin rPr acuan."""
+    r = OxmlElement("w:r")
+    if rpr_template is not None:
+        r.append(deepcopy(rpr_template))
+    t = OxmlElement("w:t")
+    t.set(XML_SPACE, "preserve")
+    t.text = text
+    r.append(t)
+    return r
+
+
+def _rpr_with_hyperlink_style(rpr_template):
+    """Salin rPr acuan lalu tambahkan rStyle "Hyperlink" (biru + garis bawah).
+
+    Urutan anak w:rPr mengikuti skema OOXML: w:rStyle harus yang pertama.
+    """
+    rpr = deepcopy(rpr_template) if rpr_template is not None else OxmlElement("w:rPr")
+    for old in rpr.findall(qn("w:rStyle")):
+        rpr.remove(old)
+    rstyle = OxmlElement("w:rStyle")
+    rstyle.set(qn("w:val"), "Hyperlink")
+    rpr.insert(0, rstyle)
+    return rpr
+
+
+def add_hyperlink(paragraph, text, url, rpr_template=None, after=None):
+    """Tambahkan <w:hyperlink> berisi satu run teks ke `paragraph`.
+
+    Format run mengikuti run asal paragraf (Times New Roman 12pt non-bold) agar
+    tampilan entri Daftar Pustaka tetap seragam; link dibedakan dengan style
+    karakter "Hyperlink" milik template (biru + garis bawah).
+
+    `after` = elemen <w:r> acuan; bila diisi, hyperlink disisipkan tepat
+    sesudahnya agar urutan teks paragraf tetap benar.
+    """
+    hlink = OxmlElement("w:hyperlink")
+    hlink.set(qn("r:id"), paragraph.part.relate_to(url, RT.HYPERLINK,
+                                                   is_external=True))
+    hlink.append(_make_run(text, _rpr_with_hyperlink_style(rpr_template)))
+    if after is not None:
+        after.addnext(hlink)
+    else:
+        paragraph._p.append(hlink)
+    return hlink
+
+
 def add_formula(doc, ref_idx, segs):
     """Klon pola paragraf template ref_idx, isi dengan run-run berformat.
 
     segs: list tuple (teks, miring, subskrip, superskrip). Dipakai menulis
     persamaan 2.1-2.9 dengan notasi baku (simbol, subskrip, superskrip).
     """
-    r0 = doc.paragraphs[ref_idx]
+    r0 = tpl_ref(doc, ref_idx)
     np_ = deepcopy(r0._p)
     for r in np_.xpath(".//w:r"):
         r.getparent().remove(r)
@@ -444,6 +533,26 @@ TABEL11 = [
 ]
 
 
+# ---------------- Bab 1 tambahan: 1.6 Batasan Masalah ----------------
+BATASAN_MASALAH = ("Untuk memudahkan pelaksanaan prototipe dalam waktu dan sumber daya yang terbatas, "
+    "penelitian ini dibatasi hal-hal sebagai berikut:\n\n"
+    "(1) Lokasi penelitian hanya dilakukan pada satu (1) bed akuaponik kangkung berukuran 2 m × 1,1 m di "
+    "Aquaponik Eco Farm Universitas Negeri Semarang (UNNES), tidak mencakup seluruh area budidaya akuaponik di lokasi tersebut.\n"
+    "(2) Akuisisi citra hanya menggunakan kamera top-down (lihat dari atas) dengan jenis kamera CSI IR 5MP "
+    "(sensor ov5647) yang dipasang permanen di atas bed. Tidak digunakan kamera samping atau multi-kamera.\n"
+    "(3) Tanaman yang dianalisis adalah kangkung (Ipomoea aquatica) pada tahap vegetatif dari seedling sampai siap panen "
+    "(ready). Tanaman jenis lain atau ikan dalam sistem akuaponik tidak menjadi objek analisis utama.\n"
+    "(4) Sistem pengolahan citra tidak menggunakan pembelajaran mendalam (deep learning) atau model berbasis jaringan syaraf tiruan. "
+    "Pendekatan yang digunakan adalah pengolahan citra konvensional, yaitu deteksi tepi Canny, aproksimasi quad, homografi planar, "
+    "segmentasi warna HSV adaptif iluminasi, dan perataan temporal EMA.\n"
+    "(5) Perangkat keras yang digunakan untuk menjalankan prototipe adalah Raspberry Pi 4B (RAM 2 GB, CPU-only, tanpa GPU) "
+    "dengan sistem operasi Debian 13. Analisis lebih lanjut dilakukan pada laptop Windows.\n"
+    "(6) Rentang waktu pengambilan citra dibatasi pada tiga rentang iluminasi harian: pagi (08.00–09.00), siang (11.00–13.00), dan sore (15.00–17.00).\n"
+    "(7) Data uji lapangan terbatas pada 18 video dan lima (5) foto bed akuaponik yang telah dikumpulkan selama periode Juli–November 2026.\n"
+    "(8) Prototipe ini fokus pada monitoring kondisi tanaman melalui computer vision (liputan kanopi, skor kuning dan cokelat, serta PSI). "
+    "Parameter kualitas air (pH, suhu, DO, amonia), pakan ikan, dan kebijakan manajemen ikan tidak termasuk dalam ruang lingkup penelitian ini.\n"
+    "(9) Pembagian zona tanaman menggunakan grid tetap berukuran 4 × 6 (24 zona) yang dihasilkan secara otomatis dari deteksi bed, tidak menggunakan grid manual yang ditetapkan secara statis.")
+
 def tahap3e(doc):
     t1 = doc.tables[1]
     for i, row in enumerate(TABEL11, 1):
@@ -451,6 +560,12 @@ def tahap3e(doc):
         t1.cell(i, 2).text = row[1]
         t1.cell(i, 3).text = row[2]
         t1.cell(i, 4).text = row[3]
+
+# ---------------- Tahap 3f (= baru): Bab 1: 1.6 Batasan Masalah ----------------
+def tahap3f(doc):
+    add_para(doc, 32, "1.6  Batasan Masalah", bold=True)
+    add_para(doc, 33, BATASAN_MASALAH, itw=["deep learning", "HSV", "EMA", "CPU", "Raspberry Pi 4B", "Debian 13", "kamera CSI IR 5MP"])
+
 # ---------------- Tahap 4a (= bangun_felix_t4a.py): Bab 2 awal ----------------
 IT4A = ["canopy cover", "Hue", "Saturation", "Value", "Plant Stress Index", "ground truth",
       "deep learning", "edge computing", "non-maximum suppression", "Exponential Moving Average",
@@ -684,6 +799,50 @@ def tahap5d2(doc):
     for i, row in enumerate(SKEN, 1):
         for j, v in enumerate(row):
             t.cell(i, j).text = v
+
+# ---------------- Bab 3 tambahan: 3.6 Jadwal Penelitian + Tabel 3.4 ----------------
+JADWAL_PENELITIAN = ("Jadwal pelaksanaan penelitian prototipe dilaksanakan selama empat bulan, "
+    "dari bulan Agustus sampai November 2026. Tiap kegiatan dijadwalkan berdasar pada urutan "
+    "pelaksanaan yang telah ditetapkan dalam Bab 3.3, yaitu pengolahan data dan pelabelan ground truth, "
+    "uji segmentasi dan perbandingan metode, validasi ambang status panen, implementasi dan uji lapangan "
+    "Raspberry Pi, uji burn-in 24 jam, serta evaluasi akhir dan penyusunan laporan.")
+
+JADWAL_TABLE = [
+ ["Pengolahan data & pelabelan GT", True, False, False, False],
+ ["Uji segmentasi & perbandingan", True, True, False, False],
+ ["Validasi ambang status panen", False, True, False, False],
+ ["Implementasi & uji lapangan Pi", False, False, True, False],
+ ["Uji burn-in 24 jam & stabil", False, False, True, True],
+ ["Evaluasi akhir & laporan", False, False, False, True],
+]
+
+def shade_cell(cell, color="90EE90"):
+    """Beri warna latar (shading) pada sel tabel. Default hijau muda (90EE90)."""
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), color)
+    tcPr.append(shd)
+
+def tahap5f(doc):
+    add_para(doc, 32, "3.6  Jadwal Penelitian", bold=True)
+    add_para(doc, 33, JADWAL_PENELITIAN, itw=["ground truth", "Raspberry Pi"])
+    add_para(doc, 89, "Tabel 3.4  Jadwal pelaksanaan penelitian (Agustus – November 2026).", bold=True)
+    t = doc.add_table(rows=7, cols=5)
+    t.style = "Table Grid"
+    for j, htxt in enumerate(["Kegiatan", "Agu", "Sep", "Okt", "Nov"]):
+        t.cell(0, j).text = htxt
+    for i, row in enumerate(JADWAL_TABLE, 1):
+        for j, v in enumerate(row):
+            cell = t.cell(i, j)
+            if j == 0:
+                cell.text = v  # kolom pertama adalah teks kegiatan
+            else:
+                cell.text = ""  # kosongkan teks, baru warna yang ditampilkan
+                if v:  # True => beri shading hijau
+                    shade_cell(cell, "90EE90")
+
 # ---------------- Tahap 6L (baru): Lampiran QR + biodata + sketsa ----------------
 LAMP_INTRO = "Lampiran 1 memuat kode QR repositori pada Gambar L.1 yang mengarah langsung ke kode sumber pipeline, skema Firebase, dan dasbor. Lampiran 2 memuat biodata penulis. Lampiran 3 memuat sketsa rumah kamera. Kode QR berukuran kecil dan diletakkan di sudut kanan atas halaman lampiran dengan tata letak yang konsisten."
 LAMP_BIODATA = "Lampiran 2: Biodata penulis — Nama: Felix Enrique, NIM: 2305110019, Program Studi: Teknik Komputer (S1), Fakultas: Fakultas Teknik, Perguruan Tinggi: Universitas Negeri Semarang (UNNES), Bidang minat: Computer Vision, Embedded Systems, Aquaponik."
@@ -745,16 +904,18 @@ TOC = ["HALAMAN JUDUL ..........................................................
  "DAFTAR GAMBAR ............................................................................................ v",
  "DAFTAR ISTILAH DAN SINGKATAN ......................................................... vi",
  "BAB I  PENDAHULUAN ..................................................................................... 1",
+ "   1.6  Batasan Masalah ............................................................................. 4",
  "BAB II  KAJIAN PUSTAKA ........................................................................... 9",
  "BAB III  METODE PELAKSANAAN .............................................................. 13",
- "DAFTAR PUSTAKA .......................................................................................... 19",
- "LAMPIRAN .......................................................................................................... 21"]
+ "   3.6  Jadwal Penelitian ......................................................................... 18",
+ "DAFTAR PUSTAKA .......................................................................................... 21",
+ "LAMPIRAN .......................................................................................................... 24"]
 
 
 def tahap6b(doc):
-    # TOC kini 11 entri (bertambah LAMPIRAN); paragraf persis-forma template
-    # hanya tersedia 10 (indeks 19-28): entri ke-11 disisipkan persis setelah
-    # entri DAFTAR PUSTAKA dengan meniru pola entri di sebelahnya.
+    # Entries 0-9 use template paragraphs (indeks 19-28). Entries >= 10 are
+    # dynamically inserted after their predecessor using the last template
+    # paragraph as a style model.
     for k, teks in enumerate(TOC):
         if k <= 9:
             p = doc.paragraphs[19 + k]
@@ -764,12 +925,15 @@ def tahap6b(doc):
                 p.runs[0].text = teks
                 for r in p.runs[1:]:
                     r.text = ""
-    p10 = find_p(doc, TOC[9])
-    np_ = Paragraph(deepcopy(p10._p), doc)
-    np_.runs[0].text = TOC[10]
-    for r in np_.runs[1:]:
-        r._r.getparent().remove(r._r)
-    p10._p.addnext(np_._p)
+        else:
+            # Find the previous TOC entry paragraph to insert after
+            prev_text = TOC[k - 1]
+            p_prev = find_p(doc, prev_text)
+            np_ = Paragraph(deepcopy(p_prev._p), doc)
+            np_.runs[0].text = teks
+            for r in np_.runs[1:]:
+                r._r.getparent().remove(r._r)
+            p_prev._p.addnext(np_._p)
 
 
 # ---------------- Tahap N (baru): nomor heading eksplisit 1.x/2.x/3.x ----------------
@@ -789,6 +953,7 @@ NOMOR_HEADING = {
  "Tujuan Prototipe": "1.3  ",
  "Manfaat Prototipe": "1.4  ",
  "Potensi Dampak Fungsional/Komersial": "1.5  ",
+ "Batasan Masalah": "1.6  ",
  "Tinjauan Pustaka": "2.1  ",
  "Landasan Teoretik": "2.2  ",
  "Deteksi Tepi Canny dan Aproksimasi Quad": "2.2.1  ",
@@ -1035,7 +1200,7 @@ SITASI = [
  "[8] S. Wan, K. Zhao, Z. Lu dkk., A modularized IoT monitoring system with edge-computing for aquaponics, Sensors, vol. 22, no. 23, p. 9260, 2022. doi: 10.3390/s22239260.",
  "[9] R. Abbasi, P. Martinez, dan R. Ahmad, Automated visual identification of foliage chlorosis in lettuce grown in aquaponic systems, Agriculture, vol. 13, no. 3, p. 615, 2023. doi: 10.3390/agriculture13030615.",
  "[10] D. Searson dkk., Automatic crop detection under field conditions using the HSV colour space and morphological operations, Comput. Electron. Agric., vol. 134, pp. 80-89, 2017. doi: 10.1016/j.compag.2016.12.013.",
- "[11] I. A. Hameed, M. Usama dkk., A new vegetation segmentation approach for cropped fields based on threshold detection from hue histograms, Sensors, vol. 18, no. 4, p. 1258, 2018. doi: 10.3390/s18041258.",
+ "[11] I. A. Hameed, M. Usama dkk., A new vegetation segmentation approach for cropped fields based on threshold detection from hue histograms, Sensors, vol. 18, no. 4, p. 1258, 2018. doi: 10.3390/s18041253.",
  "[12] V. Variyar, N. Haridas dkk., Water IoT monitoring system for aquaponics health and fishery applications, Sensors, vol. 22, no. 19, p. 7679, 2022. doi: 10.3390/s22197679.",
  "[13] R. Prajapati, P. Tamang, dan E. Kumar, IoT based aquaponics monitoring system, KEC Conference, Lalitpur, Nepal, 2018.",
  "[14] M. C. Bayas, M. T. R. Ponce dkk., Trend forecasting of computer vision application in aquaponic cropping systems industry, IEEE Access, 2021.",
@@ -1046,7 +1211,7 @@ SITASI = [
  "[19] K. G. Liakos dkk., Machine learning in agriculture: A review, Sensors, vol. 18, no. 8, p. 2674, 2018. doi: 10.3390/s18082674.",
  "[20] A. Kamilaris dan F. X. Prenafeta-Boldú, Deep learning in agriculture: A survey, Comput. Electron. Agric., 2018. doi: 10.1016/j.compag.2018.02.016.",
  "[21] A. Perez-Marin, A. J. Slater dkk., Using deep learning to predict plant growth and yield in greenhouse environments, arXiv:1907.00624, 2019.",
- "[22] P. Mane, V. Agrawal dkk., Deep learning-based prediction of plant height and crown area of vegetable crops using LiDAR point cloud, Sci. Rep., vol. 14, 2024. doi: 10.1038/s41598-024-59643-8.",
+ "[22] P. Mane, V. Agrawal dkk., Deep learning-based prediction of plant height and crown area of vegetable crops using LiDAR point cloud, Sci. Rep., vol. 14, 2024. doi: 10.1038/s41598-024-65322-8.",
  "[23] I. Athanasiadis dkk., An autoencoder wavelet based deep neural network with attention mechanism for multistep prediction of plant growth, arXiv:2012.04041, 2020.",
  "[24] J. Canny, A computational approach to edge detection, IEEE Trans. Pattern Anal. Mach. Intell., vol. 8, no. 6, pp. 679-698, 1986. doi: 10.1109/TPAMI.1986.4767851.",
  "[25] R. R. Shamshiri dkk., Advances in greenhouse automation and controlled environment agriculture: A transition to plant factories and urban agriculture, Int. J. Agric. Biol. Eng., vol. 11, no. 1, 2018. doi: 10.25165/j.ijabe.20181101.3210.",
@@ -1055,16 +1220,20 @@ SITASI = [
 
 
 def tahap6c(doc):
-    # Gaya Rafly: "DAFTAR PUSTAKA" BUKAN heading (14pt bold halaman baru),
-    # melainkan baris teks biasa 12pt non-bold rata kiri yang menempel di
-    # akhir Bab III (tanpa page break).
+    # Format Daftar Pustaka (gaya IEEE):
+    #   * judul "DAFTAR PUSTAKA": bold, rata kiri, 14pt, starts on its own page
+    #     (w:pageBreakBefore) sehingga terpisah dari blok LAMPIRAN;
+    #   * entri: nomor sitasi LITERAL "[n]" di awal teks (bukan penomoran
+    #     otomatis numId template), rata kiri, tanpa numPr, hanging indent
+    #     (baris lanjutan menjorok, nomor [n] tetap di tepi kiri).
     h = add_para(doc, 32, "DAFTAR PUSTAKA")
     h.style = doc.styles["Normal"]
     h.alignment = WD_ALIGN_PARAGRAPH.LEFT
     strip_numbering(h)
     for r in h.runs:
-        r.bold = False
-        r.font.size = Pt(12)
+        r.bold = True
+        r.font.size = Pt(14)
+    h.paragraph_format.page_break_before = True
     for sit in SITASI:
         p = add_para(doc, 33, sit)
         # Entri pustaka TANPA bold dan TANPA penomoran daftar otomatis (1.x dari
@@ -1072,11 +1241,60 @@ def tahap6c(doc):
         # Hanging indent 24pt (0,85 cm) spt dokumen Rafly: baris lanjutan
         # menjorok, nomor [n] tetap di tepi kiri.
         strip_numbering(p)
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         for r in p.runs:
             r.bold = False
+            r.font.size = Pt(12)
         pf = p.paragraph_format
         pf.left_indent = Pt(24)
         pf.first_line_indent = Pt(-24)
+
+
+# ---------------- Tahap: DOI pada Daftar Pustaka jadi hyperlink ---------------
+# Setiap entri yang memuat "doi: 10.xxxx/yyy" diubah bagian DOI-nya menjadi
+# <w:hyperlink> eksternal menuju https://doi.org/<doi> (resolusi resmi DOI).
+# Label "doi: " tetap teks biasa; hanya token DOI yang jadi link (biru +
+# garis bawah via style karakter "Hyperlink" bawaan template).
+DOI_RE = re.compile(r"doi:\s*(10\.\d{4,9}/[^\s,;]+)")
+# Jumlah entri pustaka yang memuat DOI (dipakai verifikasi).
+DOI_PUSTAKA_EXPECTED = sum(1 for s in SITASI if DOI_RE.search(s))
+
+
+def link_doi_pustaka(doc):
+    """Jadikan token DOI pada entri Daftar Pustaka sebagai hyperlink."""
+    i_pus = next((i for i, p in enumerate(doc.paragraphs)
+                  if p.text.strip() == "DAFTAR PUSTAKA"), None)
+    if i_pus is None:
+        return 0
+    n_link = 0
+    for p in doc.paragraphs[i_pus + 1:]:
+        t = p.text.strip()
+        if not t:
+            continue
+        if not re.match(r"^\[\d+\]", t):
+            break
+        for r in list(p.runs):
+            txt = r.text
+            m = DOI_RE.search(txt)
+            if not m:
+                continue
+            raw = m.group(1)
+            doi = raw.rstrip(".")
+            sisa = raw[len(doi):]          # tanda baca di akhir DOI (mis. ".")
+            prefix = txt[:m.start()] + "doi: "
+            suffix = sisa + txt[m.end():]
+            rpr = r._r.find(qn("w:rPr"))
+            # run asal: teks sebelum + label "doi: "
+            r.text = prefix
+            # bagian DOI -> hyperlink (disisipkan tepat setelah run asal)
+            hlink = add_hyperlink(p, doi, "https://doi.org/" + doi, rpr,
+                                  after=r._r)
+            # run penutup: sisa teks setelah DOI
+            if suffix:
+                hlink.addnext(_make_run(suffix, rpr))
+            n_link += 1
+    return n_link
+
 # ---------------- Patch final (= tmp_patchfinal.py + tmp_final.py) ----------------
 # P7 format 'oleh' + newline seperti template; P40 sisa fuzzy -> CV;
 # Daftar Istilah sebagai tabel 9x3 (singkatan/kepanjangan/keterangan).
@@ -1107,10 +1325,13 @@ def tahap_patch(doc):
     p7.runs[1].text = "\n"
     p7.runs[2].text = "\nFelix Enrique "
     p7.runs[3].text = "\nNIM. 2305110019"
-    p40 = doc.paragraphs[40]
-    set_text(p40, CV40)
-    ital(p40, ["Exponential Moving Average", "bed_readings"])
-    p28 = doc.paragraphs[28]
+    # CV40 (Dengan demikian) sudah ditetapkan oleh tahap3b (L5). Tidak perlu
+    # ditetapkan ulang di sini karena teks identik; tahap7struct menangani
+    # deduplikasi jika ada lebih dari satu paragraf "Dengan demikian".
+    # Cari entri TOC "DAFTAR PUSTAKA ......" (dibuat oleh tahap6b/daftar-rapi)
+    # dan ganti menjadi heading Daftar Istilah. Indeks 28 asli digeser karena
+    # entri TOC tambahan (1.6 Batasan Masalah, 3.6 Jadwal Penelitian).
+    p28 = find_p(doc, "DAFTAR PUSTAKA", start=20)
     p28.runs[0].text = "DAFTAR ISTILAH DAN SINGKATAN"
     for r in p28.runs[1:]:
         r.text = ""
@@ -1133,19 +1354,19 @@ def tahap7struct(doc):
     body = doc.element.body
     ps = doc.paragraphs
     dups = [p for p in ps if p.text.startswith("Dengan demikian")]
-    assert len(dups) == 2, f"duplikat: {len(dups)}"
-    i2 = [i for i, p in enumerate(ps) if p.text == dups[1].text][1]
-    ps = doc.paragraphs
-    to_del = []
-    if ps[i2 - 1].text.strip() == "":
-        to_del.append(ps[i2 - 1])
-    if ps[i2 - 2].text.strip() == "":
-        to_del.append(ps[i2 - 2])
-    to_del.append(ps[i2])
-    if ps[i2 + 1].text.strip() == "" and not ps[i2 + 1].text.startswith("Rumusan"):
-        to_del.append(ps[i2 + 1])
-    for p in to_del:
-        delete_p(p)
+    if len(dups) >= 2:
+        i2 = [i for i, p in enumerate(ps) if p.text == dups[1].text][1]
+        ps = doc.paragraphs
+        to_del = []
+        if ps[i2 - 1].text.strip() == "":
+            to_del.append(ps[i2 - 1])
+        if ps[i2 - 2].text.strip() == "":
+            to_del.append(ps[i2 - 2])
+        to_del.append(ps[i2])
+        if ps[i2 + 1].text.strip() == "" and not ps[i2 + 1].text.startswith("Rumusan"):
+            to_del.append(ps[i2 + 1])
+        for p in to_del:
+            delete_p(p)
     sect = body.find(qn("w:sectPr"))
     assert sect is not None
     body.remove(sect)
@@ -1169,7 +1390,10 @@ def tahap7struct(doc):
             parent.remove(el)
         cap._p.addnext(el)
 
-    toc_bab3 = find_p(doc, "BAB III  METODE PELAKSANAAN")
+    # Cari entri TOC BAB III (startwith karena ada tab + nomor halaman di belakang)
+    toc_bab3 = next((p for p in doc.paragraphs if p.text.startswith("BAB III")), None)
+    if toc_bab3 is None:
+        raise SystemExit("tidak ketemu: BAB III  METODE PELAKSANAAN")
     entry_src = find_p(doc, "HALAMAN JUDUL")
     np2 = clone_with_text(doc, entry_src, "DAFTAR PUSTAKA ................................................................................. 14")
     toc_bab3._p.addnext(np2._p)
@@ -1269,6 +1493,7 @@ DAFTAR_ISI = [
     ("1.3  Tujuan Prototipe", "3", 1),
     ("1.4  Manfaat Prototipe", "4", 1),
     ("1.5  Potensi Dampak Fungsional/Komersial", "6", 1),
+    ("1.6  Batasan Masalah", "5", 1),
     ("1.5.1  Potensi Dampak Fungsional", "6", 1),
     ("1.5.2  Potensi Dampak Komersial", "7", 1),
     ("1.5.3  Pengembangan lebih lanjut", "7", 1),
@@ -1290,8 +1515,9 @@ DAFTAR_ISI = [
     ("3.3.4  Prinsip Kerja Algoritma", "16", 2),
     ("3.4  Bahan dan Alat", "17", 1),
     ("3.5  Metrik dan Skenario Pengujian", "18", 1),
-    ("DAFTAR PUSTAKA", "19", 0),
-    ("LAMPIRAN", "21", 0),
+    ("3.6  Jadwal Penelitian", "18", 1),
+    ("DAFTAR PUSTAKA", "21", 0),
+    ("LAMPIRAN", "24", 0),
 ]
 
 DAFTAR_TABEL = [
@@ -1300,6 +1526,7 @@ DAFTAR_TABEL = [
     ("Tabel 3.1  Daftar Perangkat Keras", "17"),
     ("Tabel 3.2  Daftar Perangkat Lunak", "17"),
     ("Tabel 3.3  Skenario Pengujian Kelayakan Prototipe", "18"),
+    ("Tabel 3.4  Jadwal pelaksanaan penelitian (Agustus – November 2026)", "18"),
 ]
 
 DAFTAR_GAMBAR = [
@@ -1479,7 +1706,7 @@ def tahap_daftar_rapi(doc):
 TAHAP = [
  ("t1 judul", tahap1), ("t2 profil", tahap2),
  ("t3a latar", tahap3a), ("t3b rumusan/tujuan", tahap3b),
- ("t3c manfaat", tahap3c), ("t3d dampak", tahap3d), ("t3e tabel1.1", tahap3e),
+ ("t3c manfaat", tahap3c), ("t3d dampak", tahap3d), ("t3e tabel1.1", tahap3e), ("t3f batasan", tahap3f),
  ("t4a bab2-awal", tahap4a), ("t4b tabel2.1", tahap4b), ("t4cd landasan", tahap4cd),
  ("t5a bab3-pendekatan/lokasi/prosedur", tahap5a),
  ("t5b 3.3.1 arsitektur+g3.1", tahap5b),
@@ -1487,6 +1714,7 @@ TAHAP = [
  ("t5d1 3.3.4 kerja+g3.4/3.5", tahap5d1),
  ("t5e 3.4 bahan/alat+tabel3.1/3.2", tahap5e),
  ("t5d2 3.5 metrik+tabel3.3", tahap5d2),
+ ("t5f jadwal", tahap5f),
  ("t6b TOC", tahap6b), ("t6c pustaka", tahap6c),
  ("t6L lampiran", tahap_lampiran),
  ("patch P7/P40/istilah-tabel", tahap_patch),
@@ -1499,6 +1727,7 @@ TAHAP = [
  ("tN spasi-rafly", tahap_spasi_rafly),
  ("tN font-times-new-roman", set_font_times_new_roman),
  ("tN rapihkan-sitasi", rapihkan_sitasi),
+ ("tN link-doi-pustaka", link_doi_pustaka),
 ]
 
 
@@ -1560,6 +1789,18 @@ def verify(path):
                    and p.text.startswith(("HALAMAN JUDUL", "BAB ",
                                           "1.", "2.", "3.", "DAFTAR PUSTAKA",
                                           "LAMPIRAN", "Tabel ", "Gambar "))]
+    # Entri Daftar Pustaka di body: paragraf setelah judul "DAFTAR PUSTAKA"
+    # yang diawali nomor sitasi literal [n] (sampai paragraf pertama non-[n]).
+    i_pus = next(i for i, p in enumerate(d.paragraphs)
+                 if p.text.strip() == "DAFTAR PUSTAKA" and i > i_body)
+    entri_pustaka = []
+    for p in d.paragraphs[i_pus + 1:]:
+        t = p.text.strip()
+        if not t:
+            continue
+        if not re.match(r"^\[\d+\]", t):
+            break
+        entri_pustaka.append(p)
     checks = {
         "kata>=4200": len(teks.split()) >= 4200,
         "Felix==3": teks.count("Felix Enrique") == 3,
@@ -1568,7 +1809,7 @@ def verify(path):
         "tanpa pH-sisa": not re.findall(r"sensor pH|pH, kekeruhan|kendali pH|pergantian air", teks),
         "1x Dengan demikian": sum(1 for p in d.paragraphs
                                   if p.text.startswith("Dengan demikian")) == 1,
-        "tabel==7": len(d.tables) == 7,
+        "tabel==8": len(d.tables) == 8,
         "tabel istilah 9x3": any(len(t.rows) == 9 and len(t.columns) == 3
             and t.rows[0].cells[0].text.strip() == "Singkatan"
             and t.rows[8].cells[0].text.strip() == "URL" for t in d.tables),
@@ -1577,10 +1818,11 @@ def verify(path):
         "DAFTAR PUSTAKA": "DAFTAR PUSTAKA" in teks,
         "LAMPIRAN": "LAMPIRAN" in teks,
         "Gambar L.1": "Gambar L.1" in teks,
-        "Bab3 3.1-3.5": all(t in teks for t in
+        "Bab3 3.1-3.6": all(t in teks for t in
             ("3.1  Pendekatan Perancangan", "3.2  Lokasi dan Waktu",
              "3.3  Prosedur Perancangan", "3.4  Bahan dan Alat",
-             "3.5  Metrik dan Skenario Pengujian")),
+             "3.5  Metrik dan Skenario Pengujian",
+             "3.6  Jadwal Penelitian")),
         "Bab3 3.3.1-3.3.4": all(t in teks for t in
             ("3.3.1  Arsitektur Sistem", "3.3.2  Diagram Alir",
              "3.3.3  Skema Pemasangan", "3.3.4  Prinsip Kerja Algoritma")),
@@ -1589,10 +1831,11 @@ def verify(path):
              "2.2.1  Deteksi Tepi", "2.2.2  Ruang Warna",
              "2.2.3  Adaptasi Iluminasi", "2.2.4  Liputan Kanopi",
              "2.2.5  Metrik Evaluasi")),
-        "Bab1 1.1-1.5": all(t in teks for t in
+        "Bab1 1.1-1.6": all(t in teks for t in
             ("1.1  Latar Belakang", "1.2  Rumusan Masalah",
              "1.3  Tujuan Prototipe", "1.4  Manfaat Prototipe",
-             "1.5  Potensi Dampak")),
+             "1.5  Potensi Dampak",
+             "1.6  Batasan Masalah")),
         "heading bab tak bernomor-otomatis": not any(
             el.find(".//" + qn("w:numId")) is not None and
             el.find(".//" + qn("w:numId")).get(qn("w:val")) == "1" and
@@ -1663,10 +1906,36 @@ def verify(path):
             p._p.find(qn("w:pPr")) is not None
             and p._p.find(qn("w:pPr")).find(qn("w:pageBreakBefore")) is not None
             for p in d.paragraphs if p.text.strip() == "LAMPIRAN"),
-        "pustaka tanpa page-break": all(
-            p._p.find(qn("w:pPr")) is None
-            or p._p.find(qn("w:pPr")).find(qn("w:pageBreakBefore")) is None
+        # Judul Daftar Pustaka: bold, rata kiri, dan memulai halaman sendiri.
+        "pustaka judul bold rata-kiri di halaman sendiri": all(
+            p.alignment == WD_ALIGN_PARAGRAPH.LEFT
+            and any(r.bold for r in p.runs)
+            and p._p.find(qn("w:pPr")) is not None
+            and p._p.find(qn("w:pPr")).find(qn("w:pageBreakBefore")) is not None
             for p in d.paragraphs if p.text.strip() == "DAFTAR PUSTAKA"),
+        # Entri pustaka: nomor literal [n], rata kiri, tanpa numPr, hanging indent.
+        "entri pustaka nomor literal + hanging indent": all(
+            p.alignment == WD_ALIGN_PARAGRAPH.LEFT
+            and p._p.find(".//" + qn("w:numPr")) is None
+            and p.paragraph_format.left_indent is not None
+            and p.paragraph_format.first_line_indent is not None
+            and p.paragraph_format.first_line_indent < 0
+            for p in entri_pustaka),
+        "entri pustaka berurutan [1]-[26]": [re.match(r"^\[(\d+)\]", p.text.strip()).group(1)
+                                          for p in entri_pustaka] == [str(i) for i in range(1, 27)],
+        # DOI pada entri pustaka harus jadi hyperlink eksternal ke doi.org.
+        "DOI pustaka jadi hyperlink": (
+            sum(len(p.hyperlinks) for p in entri_pustaka) == DOI_PUSTAKA_EXPECTED
+            and all(h.url.startswith("https://doi.org/")
+                    for p in entri_pustaka for h in p.hyperlinks)
+            and all(DOI_RE.search(p.text) for p in entri_pustaka
+                    if DOI_RE.search(p.text))),
+        "hyperlink pustaka punya style Hyperlink": all(
+            r._r.find(qn("w:rPr")) is not None
+            and r._r.find(qn("w:rPr")).find(qn("w:rStyle")) is not None
+            and r._r.find(qn("w:rPr")).find(qn("w:rStyle")).get(qn("w:val"))
+            == "Hyperlink"
+            for p in entri_pustaka for h in p.hyperlinks for r in h.runs),
     }
     for cap, ok in checks.items():
         print(("OK  " if ok else "GAGAL ") + cap)
