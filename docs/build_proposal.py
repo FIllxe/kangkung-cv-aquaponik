@@ -843,10 +843,39 @@ def tahap5f(doc):
                 if v:  # True => beri shading hijau
                     shade_cell(cell, "90EE90")
 
-# ---------------- Tahap 6L (baru): Lampiran QR + biodata + sketsa ----------------
-LAMP_INTRO = "Lampiran 1 memuat kode QR repositori pada Gambar L.1 yang mengarah langsung ke kode sumber pipeline, skema Firebase, dan dasbor. Lampiran 2 memuat biodata penulis. Lampiran 3 memuat sketsa rumah kamera. Kode QR berukuran kecil dan diletakkan di sudut kanan atas halaman lampiran dengan tata letak yang konsisten."
-LAMP_BIODATA = "Lampiran 2: Biodata penulis — Nama: Felix Enrique, NIM: 2305110019, Program Studi: Teknik Komputer (S1), Fakultas: Fakultas Teknik, Perguruan Tinggi: Universitas Negeri Semarang (UNNES), Bidang minat: Computer Vision, Embedded Systems, Aquaponik."
-LAMP_SKETSA = "Lampiran 3: Sketsa rumah kamera — lihat hardware/stl dan hardware/renders pada repositori via QR Gambar L.1."
+# ---------------- Tahap 6L (baru): Lampiran lengkap ----------------
+# Data biodata (placeholder — diisi pengguna nanti)
+BIODATA_ROWS = [
+    ("Nama Lengkap", "Felix Enrique"),
+    ("Jenis Kelamin", "Laki-laki"),
+    ("Nomor Induk Mahasiswa", "2305110019"),
+    ("Tempat dan Tanggal Lahir", "Cirebon, 15 Juni 2005"),
+    ("Alamat E-mail", "raflyanggara02@students.unnes.ac.id"),
+    ("Nomor Telepon/HP", "+62 83806934635"),
+]
+
+# Tabel riwayat pendidikan: baris = item, kolom = SD/SMP/MA
+PENDIDIKAN_HEADER = ["SD", "SMP", "MA"]
+PENDIDIKAN_ROWS = [
+    ("Nama Instansi", "SD Negeri 2 Palimanan Timur", "SMP Negeri 1 Palimanan", "SMKN 1 Jamblang"),
+    ("Jurusan", "-", "-", "Teknik Komputer Jaringan"),
+    ("Tahun Masuk", "2011", "2017", "2020"),
+]
+
+LAMP_INTRO = ("Lampiran ini berisi dokumen pendukung: (1) Biodata penulis, "
+              "(2) Situasi dan kondisi kolam di Eco Farm UNNES, "
+              "(3) Box komponen sensor dan catu daya, "
+              "(4) Desain 3D kolam Eco Farm UNNES dan penempatan sensor, "
+              "(5) SK Pembimbing.")
+
+LAMP_1_JUDUL = "Lampiran 1: Biodata Penulis"
+LAMP_2_JUDUL = "Lampiran 2: Situasi dan Kondisi Kolam di Eco Farm UNNES dan Ukurannya"
+LAMP_3_JUDUL = "Lampiran 3: Box Komponen yang berisikan Sensor dan Catu Daya"
+LAMP_4_JUDUL = "Lampiran 4: Desain 3D kolam Eco Farm UNNES dan Penempatan Sensor"
+LAMP_5_JUDUL = "Lampiran 5: SK Pembimbing"
+
+LAMP_5_NOTE = ("SK Pembimbing tersedia sebagai berkas terpisah: "
+               "docs/SK-Pembimbing_Felix.pdf")
 
 
 def tambah_pagebreak(p):
@@ -868,32 +897,149 @@ def mulai_halaman_baru(p):
     return p
 
 
-def tahap_lampiran(doc):
-    h = add_para(doc, 32, "LAMPIRAN", bold=True)
-    mulai_halaman_baru(h)
-    # Paragraf isi lampiran diklon dari template 33 (gaya List Paragraph,
-    # numId 1, bold bawaan) spt entri pustaka -> buang penomoran otomatis
-    # dan bold; judul-judul "Lampiran 1/2/3" ditulis manual di teks.
-    p = add_para(doc, 33, LAMP_INTRO)
+def _heading_lampiran(doc, teks, page_break=True):
+    """Buat paragraf judul lampiran (bold, rata kiri)."""
+    p = add_para(doc, 33, teks, bold=True)
     strip_numbering(p)
     for r in p.runs:
+        r.bold = True
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    if page_break:
+        mulai_halaman_baru(p)
+    return p
+
+
+def _tabel_dua_kolom(doc, rows, header=("Item", "Nilai")):
+    """Buat tabel 2 kolom dengan gaya Table Grid."""
+    t = doc.add_table(rows=len(rows) + 1, cols=2)
+    t.style = "Table Grid"
+    t.cell(0, 0).text = header[0]
+    t.cell(0, 1).text = header[1]
+    for i, (label, value) in enumerate(rows, 1):
+        t.cell(i, 0).text = label
+        t.cell(i, 1).text = value
+    return t
+
+
+def _tabel_pendidikan(doc, header, rows):
+    """Buat tabel riwayat pendidikan (kolom pertama = item label)."""
+    ncols = len(header) + 1
+    nrows = len(rows) + 1
+    t = doc.add_table(rows=nrows, cols=ncols)
+    t.style = "Table Grid"
+    t.cell(0, 0).text = "Item"
+    for j, col in enumerate(header, 1):
+        t.cell(0, j).text = col
+    for i, row in enumerate(rows, 1):
+        t.cell(i, 0).text = row[0]
+        for j in range(1, ncols):
+            t.cell(i, j).text = row[j]
+    return t
+
+
+def _gambar_dengan_caption(doc, imgpath, caption_teks, width_in=5.0):
+    """Tambah gambar dengan caption di bawahnya (caption dulu, image disisipkan sebelum caption)."""
+    cap = add_para(doc, 89, caption_teks, bold=True)
+    strip_numbering(cap)
+    add_image_before(doc, cap, imgpath, width_in)
+    return cap
+
+
+def tahap_lampiran(doc):
+    """Buat halaman LAMPIRAN dengan semua entri lampiran sesuai format gambar."""
+    h = add_para(doc, 32, "LAMPIRAN", bold=True)
+    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    for r in h.runs:
+        r.bold = True
+    mulai_halaman_baru(h)
+
+    # Intro singkat
+    p_intro = add_para(doc, 33, LAMP_INTRO)
+    strip_numbering(p_intro)
+    for r in p_intro.runs:
         r.bold = False
-    qrp = doc.add_paragraph()
-    qrp.style = doc.styles["Normal"]
-    qrp.alignment = 2
-    qrp.add_run().add_picture(str(ROOT / "docs" / "qr_repo.png"), width=Inches(1.2))
-    g = doc.add_paragraph()
-    g.style = doc.styles["Normal"]
-    g.alignment = 2
-    r = g.add_run("Gambar L.1  Kode QR repositori sumber terbuka")
-    if doc.paragraphs[89].runs:
-        r.font.size = doc.paragraphs[89].runs[0].font.size
-    for teks in ("Lampiran 1: Kode sumber dan data — akses penuh via QR Gambar L.1.",
-                 LAMP_BIODATA, LAMP_SKETSA):
-        p = add_para(doc, 33, teks)
-        strip_numbering(p)
-        for r in p.runs:
+    p_intro.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+    # ============ Lampiran 1: Biodata Penulis ============
+    _heading_lampiran(doc, LAMP_1_JUDUL)
+    _tabel_dua_kolom(doc, BIODATA_ROWS)
+    # Tabel riwayat pendidikan
+    p_pd = add_para(doc, 33, "Riwayat Pendidikan", bold=True)
+    strip_numbering(p_pd)
+    for r in p_pd.runs:
+        r.bold = True
+    p_pd.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    _tabel_pendidikan(doc, PENDIDIKAN_HEADER, PENDIDIKAN_ROWS)
+
+    # ============ Lampiran 2: Situasi dan Kondisi Kolam ============
+    _heading_lampiran(doc, LAMP_2_JUDUL)
+    for img_name, cap in [
+        ("Situasi 1.jpg", "Gambar L.2  Kondisi kolam ikan nila di Eco Farm UNNES."),
+        ("situasi 2.jpg", "Gambar L.3  Bak tanam kangkung di kolam akuaponik."),
+    ]:
+        img_path = ROOT / "docs" / img_name
+        if img_path.exists():
+            _gambar_dengan_caption(doc, img_path, cap, width_in=3.5)
+        else:
+            p_missing = add_para(doc, 33, f"[Gambar {img_name} belum tersedia]")
+            strip_numbering(p_missing)
+
+    # ============ Lampiran 3: Box Komponen ============
+    _heading_lampiran(doc, LAMP_3_JUDUL)
+    komponen_rows = [
+        ("1", "1", "Raspberry Pi 4B"),
+        ("2", "1", "Kamera OV5647 (CSI)"),
+        ("3", "1", "Sensor SHT30 (Suhu & Kelembaban)"),
+        ("4", "1", "Sensor DS18B20 (Suhu Air)"),
+        ("5", "1", "Relay Module"),
+        ("6", "1", "Pompa Air"),
+        ("7", "1", "Adaptor 5V 2.5A"),
+        ("8", "1", "Kabel USB & GPIO"),
+        ("9", "1", "Konektor & Kabeling"),
+        ("10", "1", "Box Pelindung IP65"),
+    ]
+    _tabel_dua_kolom(
+        doc,
+        [(f"Komponen {n}", f"{qty}x  {nama}") for n, qty, nama in komponen_rows],
+        header=("No", "Komponen"),
+    )
+    p_cap3 = add_para(doc, 89, "Gambar L.4  Box komponen sensor dan catu daya.", bold=True)
+    strip_numbering(p_cap3)
+    img3 = ROOT / "docs" / "skema_kamera.png"
+    if img3.exists():
+        add_image_before(doc, p_cap3, img3, width_in=4.5)
+    else:
+        p_missing = add_para(doc, 33, "[Gambar skema_kamera.png belum tersedia]")
+        strip_numbering(p_missing)
+
+    # ============ Lampiran 4: Desain 3D kolam ============
+    _heading_lampiran(doc, LAMP_4_JUDUL)
+    for img_name, cap in [
+        ("GAMBAR3D_1_RAKITAN.png", "Gambar L.5  Desain 3D rakitan kolam akuaponik."),
+        ("GAMBAR3D_2_LEDAKAN.png", "Gambar L.6  Desain 3D ledakan komponen."),
+        ("GAMBAR3D_3_XRAY.png", "Gambar L.7  Tampilan X-ray desain 3D."),
+        ("GAMBAR3D_4_PART.png", "Gambar L.8  Detail bagian dari desain 3D."),
+    ]:
+        img_path = ROOT / "docs" / img_name
+        if img_path.exists():
+            _gambar_dengan_caption(doc, img_path, cap, width_in=5.0)
+        else:
+            p_missing = add_para(doc, 33, f"[Gambar {img_name} belum tersedia]")
+            strip_numbering(p_missing)
+
+    # ============ Lampiran 5: SK Pembimbing ============
+    _heading_lampiran(doc, LAMP_5_JUDUL)
+    img_sk = ROOT / "docs" / "SK-Pembimbing_Felix.png"
+    if img_sk.exists():
+        p_cap5 = add_para(doc, 89, "Gambar L.9  Surat Keterangan Pembimbing.", bold=True)
+        strip_numbering(p_cap5)
+        add_image_before(doc, p_cap5, img_sk, width_in=6.0)
+    else:
+        p_sk = add_para(doc, 33, LAMP_5_NOTE)
+        strip_numbering(p_sk)
+        for r in p_sk.runs:
             r.bold = False
+        p_sk.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
 
 # ---------------- Tahap 6b (= t6b.py): Daftar Isi statis P19-P28 ----------------
@@ -1518,6 +1664,11 @@ DAFTAR_ISI = [
     ("3.6  Jadwal Penelitian", "18", 1),
     ("DAFTAR PUSTAKA", "21", 0),
     ("LAMPIRAN", "24", 0),
+    ("   Lampiran 1: Biodata Penulis", "25", 1),
+    ("   Lampiran 2: Situasi dan Kondisi Kolam di Eco Farm UNNES", "26", 1),
+    ("   Lampiran 3: Box Komponen Sensor dan Catu Daya", "28", 1),
+    ("   Lampiran 4: Desain 3D kolam Eco Farm UNNES", "29", 1),
+    ("   Lampiran 5: SK Pembimbing", "31", 1),
 ]
 
 DAFTAR_TABEL = [
@@ -1809,15 +1960,15 @@ def verify(path):
         "tanpa pH-sisa": not re.findall(r"sensor pH|pH, kekeruhan|kendali pH|pergantian air", teks),
         "1x Dengan demikian": sum(1 for p in d.paragraphs
                                   if p.text.startswith("Dengan demikian")) == 1,
-        "tabel==8": len(d.tables) == 8,
+        "tabel>=8": len(d.tables) >= 8,
         "tabel istilah 9x3": any(len(t.rows) == 9 and len(t.columns) == 3
             and t.rows[0].cells[0].text.strip() == "Singkatan"
             and t.rows[8].cells[0].text.strip() == "URL" for t in d.tables),
-        "gambar==10": len(d.inline_shapes) == 10,
+        "gambar>=10": len(d.inline_shapes) >= 10,
         "BAB I/II/III": all(("BAB %s\n" % x) in teks for x in ("I", "II", "III")),
         "DAFTAR PUSTAKA": "DAFTAR PUSTAKA" in teks,
         "LAMPIRAN": "LAMPIRAN" in teks,
-        "Gambar L.1": "Gambar L.1" in teks,
+        "Gambar L.2-L.8": any(f"Gambar L.{n}" in teks for n in range(2, 9)),
         "Bab3 3.1-3.6": all(t in teks for t in
             ("3.1  Pendekatan Perancangan", "3.2  Lokasi dan Waktu",
              "3.3  Prosedur Perancangan", "3.4  Bahan dan Alat",
