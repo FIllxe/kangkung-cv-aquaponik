@@ -64,6 +64,27 @@ def set_slide_background(slide):
     fill.solid()
     fill.fore_color.rgb = BG_COLOR
 
+def add_qr_watermark(slide, qr_path, label="github.com/FIllxe/kangkung-cv-aquaponik"):
+    """Tambahkan QR code mini di pojok kanan bawah setiap slide."""
+    if not qr_path or not qr_path.exists():
+        return
+    # QR code box mini 1.0 x 1.0 inch, pojok kanan bawah
+    qr_size = Inches(0.95)
+    left_qr = Inches(13.333) - qr_size - Inches(0.18)
+    top_qr  = Inches(7.5) - qr_size - Inches(0.12)
+    slide.shapes.add_picture(str(qr_path), left_qr, top_qr, qr_size, qr_size)
+    # Label URL kecil di bawah QR
+    tb_lbl = slide.shapes.add_textbox(left_qr - Inches(0.6), top_qr + qr_size + Inches(0.01), qr_size + Inches(0.6), Inches(0.18))
+    tf_lbl = tb_lbl.text_frame
+    tf_lbl.word_wrap = False
+    tf_lbl.margin_left = tf_lbl.margin_top = tf_lbl.margin_right = tf_lbl.margin_bottom = 0
+    p_lbl = tf_lbl.paragraphs[0]
+    p_lbl.text = label
+    p_lbl.alignment = PP_ALIGN.RIGHT
+    p_lbl.font.name = FONT_CODE
+    p_lbl.font.size = Pt(5.5)
+    p_lbl.font.color.rgb = TEXT_MUTED
+
 def add_header(slide, tag_text, title_text, is_backup=False):
     tb_tag = slide.shapes.add_textbox(Inches(0.8), Inches(0.32), Inches(11.7), Inches(0.24))
     tf_tag = tb_tag.text_frame
@@ -263,6 +284,10 @@ def build_presentation(output_path):
     if not qr_doc_path.exists():
         qr_doc_path = SNAP_DIR / "qr_manual_doc.png"
 
+    # Shortcut: resolve ke None jika tidak ada file
+    qr_repo = qr_repo_path if qr_repo_path.exists() else None
+    qr_doc  = qr_doc_path  if qr_doc_path.exists()  else None
+
     # =========================================================================
     # BAGIAN I: PRESENTASI UTAMA (SLIDE 1 - 12)
     # =========================================================================
@@ -343,6 +368,7 @@ def build_presentation(output_path):
     # SLIDE 2: ARSITEKTUR 8 PILAR
     s2 = prs.slides.add_slide(blank_layout)
     set_slide_background(s2)
+    add_qr_watermark(s2, qr_repo)
     add_header(s2, "00 / Arsitektur Sistem", "Peta Alur 8 Pilar Perhitungan Matematis End-to-End")
 
     w_card4 = Inches(2.7)
@@ -420,6 +446,7 @@ def build_presentation(output_path):
     # SLIDE 3: PILAR 1 — HOMOGRAFI PERSPEKTIF 3×3
     s3 = prs.slides.add_slide(blank_layout)
     set_slide_background(s3)
+    add_qr_watermark(s3, qr_repo)
     add_header(s3, "01 / Geometri Spasial", "Kalibrasi Homografi 3×3 & Ortorektifikasi Metrik Talang")
 
     add_card(s3, Inches(0.8), top_pos, w_box2, h_box2)
@@ -459,6 +486,7 @@ def build_presentation(output_path):
     # SLIDE 4: PILAR 2 & 3 — FOTOMETRIK & SPEKTRAL ExG
     s4 = prs.slides.add_slide(blank_layout)
     set_slide_background(s4)
+    add_qr_watermark(s4, qr_repo)
     add_header(s4, "02 / Spektral & Fotometrik", "Koreksi White Balance Hangat & Indeks Spektral ExG")
 
     add_card(s4, Inches(0.8), top_pos, w_box2, h_box2)
@@ -498,6 +526,7 @@ def build_presentation(output_path):
     # SLIDE 5: PILAR 4 — ADAPTIVE HSV THRESHOLDING
     s5 = prs.slides.add_slide(blank_layout)
     set_slide_background(s5)
+    add_qr_watermark(s5, qr_repo)
     add_header(s5, "03 / Segmentasi Adaptif", "Formulasi Kontinu Adaptive HSV Thresholding")
 
     add_card(s5, Inches(0.8), top_pos, w_box2, h_box2)
@@ -561,6 +590,7 @@ def build_presentation(output_path):
     # SLIDE 6: PILAR 5 — MORFOLOGI SPASIAL ADJASENSI
     s6 = prs.slides.add_slide(blank_layout)
     set_slide_background(s6)
+    add_qr_watermark(s6, qr_repo)
     add_header(s6, "04 / Morfologi Spasial", "Filter Morfologi Adjasensi Spasial Daun Cokelat")
 
     add_card(s6, Inches(0.8), top_pos, w_box2, h_box2)
@@ -600,6 +630,7 @@ def build_presentation(output_path):
     # SLIDE 7: PILAR 6 — RESOLUSI METRIK & GRID 24 ZONA
     s7 = prs.slides.add_slide(blank_layout)
     set_slide_background(s7)
+    add_qr_watermark(s7, qr_repo)
     add_header(s7, "05 / Metrik Kanopi", "Resolusi Ruang Metrik & Grid Diskrit 24 Zona (4×6)")
 
     add_card(s7, Inches(0.8), top_pos, w_box2, h_box2)
@@ -639,6 +670,7 @@ def build_presentation(output_path):
     # SLIDE 8: PILAR 6 — SKOR KESIAPAN PANEN NON-LINIER
     s8 = prs.slides.add_slide(blank_layout)
     set_slide_background(s8)
+    add_qr_watermark(s8, qr_repo)
     add_header(s8, "05 / Kesiapan Panen", "Fungsi Skor Panen Non-Linier Piecewise dengan Penalti Penuaan")
 
     add_card(s8, Inches(0.8), top_pos, w_box2, h_box2)
@@ -678,6 +710,7 @@ def build_presentation(output_path):
     # SLIDE 9: PILAR 7 — INDEKS STRES PSI v2.0
     s9 = prs.slides.add_slide(blank_layout)
     set_slide_background(s9)
+    add_qr_watermark(s9, qr_repo)
     add_header(s9, "06 / Formulasi Indeks Stres", "Plant Stress Index (PSI v2.0): Model Linier Tanpa Saturasi")
 
     add_card(s9, Inches(0.8), top_pos, Inches(11.733), Inches(1.8))
@@ -738,6 +771,7 @@ def build_presentation(output_path):
     # SLIDE 10: PILAR 8 — INTEGRASI ANTARMUKA KE KONTROLER FUZZY
     s10 = prs.slides.add_slide(blank_layout)
     set_slide_background(s10)
+    add_qr_watermark(s10, qr_repo)
     add_header(s10, "07 / Integrasi Sistem", "Antarmuka Data PSI ke Kontroler Pompa Air")
 
     add_card(s10, Inches(0.8), top_pos, w_box2, h_box2)
@@ -777,6 +811,7 @@ def build_presentation(output_path):
     # SLIDE 11: KESIMPULAN TEKNIS & HASIL VERIFIKASI TERMINAL
     s11 = prs.slides.add_slide(blank_layout)
     set_slide_background(s11)
+    add_qr_watermark(s11, qr_repo)
     add_header(s11, "08 / Kesimpulan Teknis", "Karakteristik Sistem & Hasil Verifikasi Paritas Terminal")
 
     add_card(s11, Inches(0.8), top_pos, Inches(4.8), h_box2)
@@ -831,6 +866,7 @@ def build_presentation(output_path):
     # SLIDE 12: PENUTUP PRESENTASI UTAMA & QR AKSES
     s12 = prs.slides.add_slide(blank_layout)
     set_slide_background(s12)
+    add_qr_watermark(s12, qr_repo)
     add_header(s12, "09 / Penutup Presentasi", "Akses Repositori GitHub & Panduan Replikasi Cepat")
 
     w_card3 = Inches(3.64)
@@ -974,6 +1010,7 @@ def build_presentation(output_path):
     # SLIDE 14: [BACKUP] SHOELACE & EMA DETAIL
     s14 = prs.slides.add_slide(blank_layout)
     set_slide_background(s14)
+    add_qr_watermark(s14, qr_repo)
     add_header(s14, "Lampiran 01 / Geometri Spasial", "Validasi Luas Poligon Shoelace & Filter Temporal EMA", is_backup=True)
 
     add_card(s14, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1013,6 +1050,7 @@ def build_presentation(output_path):
     # SLIDE 15: [BACKUP] KODE HOMOGRAFI & SHOELACE
     s15 = prs.slides.add_slide(blank_layout)
     set_slide_background(s15)
+    add_qr_watermark(s15, qr_repo)
     add_header(s15, "Lampiran 01 / Kode Native", "Implementasi Kode Python vs Output Eksekusi: Homografi & Shoelace", is_backup=True)
 
     code_lines_warp = [
@@ -1033,17 +1071,9 @@ def build_presentation(output_path):
         "    M = cv2.getPerspectiveTransform(src, dst)",
         "    return M"
     ]
-    add_native_code_card(s15, Inches(0.8), top_pos, w_box2, Inches(4.5),
+    add_native_code_card(s15, Inches(0.8), top_pos, w_box2, h_box2,
                         "adaptive_bed.py — validasi_quad() & matriks_warp()", code_lines_warp, font_size=8.1, is_terminal=False)
 
-    tb_s15_l = s15.shapes.add_textbox(Inches(0.8), Inches(6.0), w_box2, Inches(1.1))
-    tf_s15_l = tb_s15_l.text_frame
-    tf_s15_l.word_wrap = True
-    p = tf_s15_l.paragraphs[0]
-    p.text = "Fungsi validasi_quad() dan matriks_warp() menjamin kamera miring menghasilkan proyeksi metrik datar 1200×660 px yang proporsional terhadap ukuran fisik asli."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     term_lines_warp = [
         ">>> # Uji Hitung Luas Poligon Shoelace & Homografi:",
@@ -1060,21 +1090,14 @@ def build_presentation(output_path):
         "    Matriks H[2, :] = [-3.8105e-05  2.1042e-04  1.0000e+00]",
         "    Status Komputasi: INVERTIBEL (det(H) != 0, VALID)"
     ]
-    add_native_code_card(s15, Inches(6.866), top_pos, w_box2, Inches(4.5),
+    add_native_code_card(s15, Inches(6.866), top_pos, w_box2, h_box2,
                         "Terminal Python — Verifikasi Homografi & Shoelace", term_lines_warp, font_size=8.0, is_terminal=True)
 
-    tb_s15_r = s15.shapes.add_textbox(Inches(6.866), Inches(6.0), w_box2, Inches(1.1))
-    tf_s15_r = tb_s15_r.text_frame
-    tf_s15_r.word_wrap = True
-    p = tf_s15_r.paragraphs[0]
-    p.text = "Hasil eksekusi komputasi determinan silang identik mutlak dengan hitungan manual (selisih nol), membuktikan akurasi penapisan poligon talang."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     # SLIDE 16: [BACKUP] SPEKTRAL PIGMEN & FISIKA HSV
     s16 = prs.slides.add_slide(blank_layout)
     set_slide_background(s16)
+    add_qr_watermark(s16, qr_repo)
     add_header(s16, "Lampiran 02 / Fisika Optik Spektral", "Spektral Pigmen & Dekomposisi Ruang Warna HSV", is_backup=True)
 
     add_card(s16, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1114,6 +1137,7 @@ def build_presentation(output_path):
     # SLIDE 17: [BACKUP] DETAIL FORMULASI GRAY-WORLD & CLAHE
     s17 = prs.slides.add_slide(blank_layout)
     set_slide_background(s17)
+    add_qr_watermark(s17, qr_repo)
     add_header(s17, "Lampiran 02 / Fotometrik", "Koreksi White Balance Hangat & CLAHE Value Blending", is_backup=True)
 
     add_card(s17, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1153,6 +1177,7 @@ def build_presentation(output_path):
     # SLIDE 18: [BACKUP] HITUNG MANUAL ExG DAUN VS AIR
     s18 = prs.slides.add_slide(blank_layout)
     set_slide_background(s18)
+    add_qr_watermark(s18, qr_repo)
     add_header(s18, "Lampiran 03 / Indeks Spektral ExG", "Indeks Diferensial Vegetasi ExG & Penapisan Glare Air", is_backup=True)
 
     add_card(s18, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1192,6 +1217,7 @@ def build_presentation(output_path):
     # SLIDE 19: [BACKUP] KODE WB & ExG
     s19 = prs.slides.add_slide(blank_layout)
     set_slide_background(s19)
+    add_qr_watermark(s19, qr_repo)
     add_header(s19, "Lampiran 03 / Kode Native", "Implementasi Kode Python vs Output Eksekusi: Koreksi WB & ExG", is_backup=True)
 
     code_lines_exg = [
@@ -1211,17 +1237,9 @@ def build_presentation(output_path):
         "    mask_muda[noise_glare] = 0; mask_mature[noise_glare] = 0",
         "    return mask_muda | mask_mature"
     ]
-    add_native_code_card(s19, Inches(0.8), top_pos, w_box2, Inches(4.5),
+    add_native_code_card(s19, Inches(0.8), top_pos, w_box2, h_box2,
                         "kangkung_cv.py — segmentasi_hijau_adaptif()", code_lines_exg, font_size=8.1, is_terminal=False)
 
-    tb_s19_l = s19.shapes.add_textbox(Inches(0.8), Inches(6.0), w_box2, Inches(1.1))
-    tf_s19_l = tb_s19_l.text_frame
-    tf_s19_l.word_wrap = True
-    p = tf_s19_l.paragraphs[0]
-    p.text = "Kombinasi indeks ExG dan ruang warna HSV menghasilkan diskriminasi ganda yang menapis refleksi air tanpa memotong pucuk klorofil baru."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     term_lines_exg = [
         ">>> # Uji Diskriminasi Spektral ExG pada 2 Piksel:",
@@ -1237,21 +1255,14 @@ def build_presentation(output_path):
         "    Klasifikasi   : SUPRESI NOISE AIR (Dibatalkan ke 0)",
         "    Paritas Manual: IDENTIK 100% (Δ = 0)"
     ]
-    add_native_code_card(s19, Inches(6.866), top_pos, w_box2, Inches(4.5),
+    add_native_code_card(s19, Inches(6.866), top_pos, w_box2, h_box2,
                         "Terminal Python — Verifikasi Diskriminasi ExG", term_lines_exg, font_size=8.0, is_terminal=True)
 
-    tb_s19_r = s19.shapes.add_textbox(Inches(6.866), Inches(6.0), w_box2, Inches(1.1))
-    tf_s19_r = tb_s19_r.text_frame
-    tf_s19_r.word_wrap = True
-    p = tf_s19_r.paragraphs[0]
-    p.text = "Hasil eksekusi komputasi indeks ExG membuktikan eliminasi pantulan glare air secara deterministik dengan nilai selisih nol terhadap hitungan manual."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     # SLIDE 20: [BACKUP] PENURUNAN MANUAL HSV REDUP & NORMAL
     s20 = prs.slides.add_slide(blank_layout)
     set_slide_background(s20)
+    add_qr_watermark(s20, qr_repo)
     add_header(s20, "Lampiran 04 / Penurunan Manual", "Kalkulasi Manual HSV: Kondisi Redup & Normal", is_backup=True)
 
     add_card(s20, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1293,6 +1304,7 @@ def build_presentation(output_path):
     # SLIDE 21: [BACKUP] PENURUNAN MANUAL HSV TERIK & TABEL
     s21 = prs.slides.add_slide(blank_layout)
     set_slide_background(s21)
+    add_qr_watermark(s21, qr_repo)
     add_header(s21, "Lampiran 04 / Penurunan & Paritas", "Kalkulasi Manual HSV Terik & Rekapitulasi Paritas", is_backup=True)
 
     add_card(s21, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1358,6 +1370,7 @@ def build_presentation(output_path):
     # SLIDE 22: [BACKUP] KODE ADAPTIVE HSV
     s22 = prs.slides.add_slide(blank_layout)
     set_slide_background(s22)
+    add_qr_watermark(s22, qr_repo)
     add_header(s22, "Lampiran 04 / Kode Native", "Implementasi Kode Python vs Output Eksekusi: Adaptive HSV", is_backup=True)
 
     code_lines_hsv = [
@@ -1387,17 +1400,9 @@ def build_presentation(output_path):
         "        rng[k] = {\"lower\": lo, \"upper\": hi}",
         "    return rng"
     ]
-    add_native_code_card(s22, Inches(0.8), top_pos, w_box2, Inches(4.5), 
+    add_native_code_card(s22, Inches(0.8), top_pos, w_box2, h_box2, 
                         "kangkung_cv.py — parameter_adaptif()", code_lines_hsv, font_size=8.3, is_terminal=False)
 
-    tb_s22_l = s22.shapes.add_textbox(Inches(0.8), Inches(6.0), w_box2, Inches(1.1))
-    tf_s22_l = tb_s22_l.text_frame
-    tf_s22_l.word_wrap = True
-    p = tf_s22_l.paragraphs[0]
-    p.text = "Implementasi fungsi parameter_adaptif() secara deterministik menghitung s_lo, v_lo, dan v_hi berbasis rasio V̄ / 128 tanpa intervensi manual."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     term_lines_hsv = [
         ">>> # Eksekusi parameter_adaptif() pada 3 Kondisi:",
@@ -1419,21 +1424,14 @@ def build_presentation(output_path):
         "    Hasil Kode: S_lo = 42 | V_lo = 34 | V_hi = 249",
         "    Status    : 100% PARITAS IDENTIK (Δ = 0)"
     ]
-    add_native_code_card(s22, Inches(6.866), top_pos, w_box2, Inches(4.5),
+    add_native_code_card(s22, Inches(6.866), top_pos, w_box2, h_box2,
                         "Terminal Python — Output parameter_adaptif()", term_lines_hsv, font_size=8.2, is_terminal=True)
 
-    tb_s22_r = s22.shapes.add_textbox(Inches(6.866), Inches(6.0), w_box2, Inches(1.1))
-    tf_s22_r = tb_s22_r.text_frame
-    tf_s22_r.word_wrap = True
-    p = tf_s22_r.paragraphs[0]
-    p.text = "Keluaran komputasi Python (Redup: 33, 25; Normal: 38, 30; Terik: 42, 34) konsisten 100% dengan turunan matematis manual (selisih nol)."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     # SLIDE 23: [BACKUP] DETAIL MORFOLOGI ELIPS 21x21
     s23 = prs.slides.add_slide(blank_layout)
     set_slide_background(s23)
+    add_qr_watermark(s23, qr_repo)
     add_header(s23, "Lampiran 05 / Teori Morfologi", "Filter Morfologi Adjasensi Spasial Daun Cokelat", is_backup=True)
 
     add_card(s23, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1473,6 +1471,7 @@ def build_presentation(output_path):
     # SLIDE 24: [BACKUP] KALKULASI MANUAL SKOR PANEN
     s24 = prs.slides.add_slide(blank_layout)
     set_slide_background(s24)
+    add_qr_watermark(s24, qr_repo)
     add_header(s24, "Lampiran 06 / Penurunan Manual", "Kalkulasi Manual Skor Kesiapan Panen pada 3 Kasus", is_backup=True)
 
     add_card(s24, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1512,6 +1511,7 @@ def build_presentation(output_path):
     # SLIDE 25: [BACKUP] KODE SKOR PANEN
     s25 = prs.slides.add_slide(blank_layout)
     set_slide_background(s25)
+    add_qr_watermark(s25, qr_repo)
     add_header(s25, "Lampiran 06 / Kode Native", "Implementasi Kode Python vs Output Eksekusi: Skor Panen", is_backup=True)
 
     code_lines_sc = [
@@ -1529,17 +1529,9 @@ def build_presentation(output_path):
         "        penalti = (cov - 80.0) * 1.5",
         "        return max(60.0, 100.0 - penalti)"
     ]
-    add_native_code_card(s25, Inches(0.8), top_pos, w_box2, Inches(4.5),
+    add_native_code_card(s25, Inches(0.8), top_pos, w_box2, h_box2,
                         "kangkung_cv.py — coverage_to_score()", code_lines_sc, font_size=8.3, is_terminal=False)
 
-    tb_s25_l = s25.shapes.add_textbox(Inches(0.8), Inches(6.0), w_box2, Inches(1.1))
-    tf_s25_l = tb_s25_l.text_frame
-    tf_s25_l.word_wrap = True
-    p = tf_s25_l.paragraphs[0]
-    p.text = "Fungsi coverage_to_score() mengimplementasikan model piecewise agronomis yang secara otomatis memicu peringatan panen darurat saat coverage > 80%."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     term_lines_sc = [
         ">>> # Uji Output coverage_to_score() pada 3 Kasus:",
@@ -1558,21 +1550,14 @@ def build_presentation(output_path):
         "    Kalkulasi : 100.0 - (10.0 * 1.5) = 85.0000",
         "    Hasil Kode: 85.0000  ===> Status: HARUS PANEN (Δ = 0)"
     ]
-    add_native_code_card(s25, Inches(6.866), top_pos, w_box2, Inches(4.5),
+    add_native_code_card(s25, Inches(6.866), top_pos, w_box2, h_box2,
                         "Terminal Python — Output coverage_to_score()", term_lines_sc, font_size=8.1, is_terminal=True)
 
-    tb_s25_r = s25.shapes.add_textbox(Inches(6.866), Inches(6.0), w_box2, Inches(1.1))
-    tf_s25_r = tb_s25_r.text_frame
-    tf_s25_r.word_wrap = True
-    p = tf_s25_r.paragraphs[0]
-    p.text = "Seluruh keluaran komputasi skor panen 100% konsisten dengan kalkulasi matematis analitik (selisih nol), membuktikan akurasi kurva respons piecewise."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     # SLIDE 26: [BACKUP] HITUNG MANUAL PSI 1 (RENDAH & SEDANG)
     s26 = prs.slides.add_slide(blank_layout)
     set_slide_background(s26)
+    add_qr_watermark(s26, qr_repo)
     add_header(s26, "Lampiran 07 / Penurunan Manual", "Kalkulasi Manual PSI: Stres Rendah & Sedang", is_backup=True)
 
     add_card(s26, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1614,6 +1599,7 @@ def build_presentation(output_path):
     # SLIDE 27: [BACKUP] HITUNG MANUAL PSI 2 (TINGGI & TABEL)
     s27 = prs.slides.add_slide(blank_layout)
     set_slide_background(s27)
+    add_qr_watermark(s27, qr_repo)
     add_header(s27, "Lampiran 07 / Penurunan & Paritas", "Kalkulasi Manual PSI Tinggi & Rekapitulasi Paritas", is_backup=True)
 
     add_card(s27, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1679,6 +1665,7 @@ def build_presentation(output_path):
     # SLIDE 28: [BACKUP] KODE PSI
     s28 = prs.slides.add_slide(blank_layout)
     set_slide_background(s28)
+    add_qr_watermark(s28, qr_repo)
     add_header(s28, "Lampiran 07 / Kode Native", "Implementasi Kode Python vs Output Eksekusi: Formulasi PSI", is_backup=True)
 
     code_lines_psi = [
@@ -1706,17 +1693,9 @@ def build_presentation(output_path):
         "    psi = 100.0 * pembilang / n",
         "    return psi"
     ]
-    add_native_code_card(s28, Inches(0.8), top_pos, w_box2, Inches(4.5),
+    add_native_code_card(s28, Inches(0.8), top_pos, w_box2, h_box2,
                         "kangkung_cv.py — hitung_psi()", code_lines_psi, font_size=8.4, is_terminal=False)
 
-    tb_s28_l = s28.shapes.add_textbox(Inches(0.8), Inches(6.0), w_box2, Inches(1.1))
-    tf_s28_l = tb_s28_l.text_frame
-    tf_s28_l.word_wrap = True
-    p = tf_s28_l.paragraphs[0]
-    p.text = "Fungsi hitung_psi() mengimplementasikan formula 100 * (0.5*Y + 1.0*B) / N secara presisi float64 dan menerapkan protokol fail-safe N=0 -> None."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     term_lines_psi = [
         ">>> # Uji Output hitung_psi() pada 3 Kasus Stres (N = 10.000 px):",
@@ -1736,21 +1715,14 @@ def build_presentation(output_path):
         "    Kalkulasi : 100 * (0.5*3000 + 1.0*5000) / 10000 = 65.0000",
         "    Hasil Kode: 65.0000  ===> SAKIT / KRITIS (Δ = 0)"
     ]
-    add_native_code_card(s28, Inches(6.866), top_pos, w_box2, Inches(4.5),
+    add_native_code_card(s28, Inches(6.866), top_pos, w_box2, h_box2,
                         "Terminal Python — Output Eksekusi hitung_psi()", term_lines_psi, font_size=8.2, is_terminal=True)
 
-    tb_s28_r = s28.shapes.add_textbox(Inches(6.866), Inches(6.0), w_box2, Inches(1.1))
-    tf_s28_r = tb_s28_r.text_frame
-    tf_s28_r.word_wrap = True
-    p = tf_s28_r.paragraphs[0]
-    p.text = "Eksekusi terminal pada populasi 10.000 piksel menghasilkan nilai PSI 10.0000, 25.0000, dan 65.0000 yang identik tanpa deviasi sedikit pun terhadap hitungan manual."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     # SLIDE 29: [BACKUP] MATRIKS SKENARIO PSI 10 - 100
     s29 = prs.slides.add_slide(blank_layout)
     set_slide_background(s29)
+    add_qr_watermark(s29, qr_repo)
     add_header(s29, "Lampiran 07 / Skenario", "Matriks Skenario Lengkap Nilai PSI (10 – 100)", is_backup=True)
 
     add_card(s29, Inches(0.8), top_pos, Inches(11.733), h_box2)
@@ -1800,6 +1772,7 @@ def build_presentation(output_path):
     # SLIDE 30: [BACKUP] SINGULARITAS & TEOREMA AGREGASI 24 PETAK
     s30 = prs.slides.add_slide(blank_layout)
     set_slide_background(s30)
+    add_qr_watermark(s30, qr_repo)
     add_header(s30, "Lampiran 07 / Batasan & Agregasi", "Kontrak Integritas Data & Teorema Agregasi 24 Petak", is_backup=True)
 
     add_card(s30, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1839,6 +1812,7 @@ def build_presentation(output_path):
     # SLIDE 31: [BACKUP] DETAIL FORMULASI FUZZY SUGENO ORDE-0
     s31 = prs.slides.add_slide(blank_layout)
     set_slide_background(s31)
+    add_qr_watermark(s31, qr_repo)
     add_header(s31, "Lampiran 08 / Kontrol Fuzzy", "Formulasi Fungsi Keanggotaan & Aturan Sugeno Orde-0", is_backup=True)
 
     add_card(s31, Inches(0.8), top_pos, w_box2, h_box2)
@@ -1878,6 +1852,7 @@ def build_presentation(output_path):
     # SLIDE 32: [BACKUP] KODE FUZZY SUGENO
     s32 = prs.slides.add_slide(blank_layout)
     set_slide_background(s32)
+    add_qr_watermark(s32, qr_repo)
     add_header(s32, "Lampiran 08 / Kode Native", "Implementasi Kode Python vs Output Eksekusi: Fuzzy Sugeno", is_backup=True)
 
     code_lines_fz = [
@@ -1898,17 +1873,9 @@ def build_presentation(output_path):
         "        rekomendasi = \"OPTIMAL / TANPA PENGURASAN (0 Liter)\"",
         "    return z_score, rekomendasi"
     ]
-    add_native_code_card(s32, Inches(0.8), top_pos, w_box2, Inches(4.5),
+    add_native_code_card(s32, Inches(0.8), top_pos, w_box2, h_box2,
                         "esp32_bridge.py — hitung_sugeno()", code_lines_fz, font_size=8.2, is_terminal=False)
 
-    tb_s32_l = s32.shapes.add_textbox(Inches(0.8), Inches(6.0), w_box2, Inches(1.1))
-    tf_s32_l = tb_s32_l.text_frame
-    tf_s32_l.word_wrap = True
-    p = tf_s32_l.paragraphs[0]
-    p.text = "Fungsi hitung_sugeno() mengikat hasil visi komputer dengan aktuasi pompa fisik di mikrokontroler ESP32 secara real-time via komunikasi serial/BLE."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     term_lines_fz = [
         ">>> # Uji Output Kontroler Fuzzy Sugeno pada 3 Skenario:",
@@ -1927,17 +1894,9 @@ def build_presentation(output_path):
         "    Output Z* = 30.0% | V = 750.0 Liter",
         "    Status: KRITIS / FLUSH DARURAT 30% (Δ = 0)"
     ]
-    add_native_code_card(s32, Inches(6.866), top_pos, w_box2, Inches(4.5),
+    add_native_code_card(s32, Inches(6.866), top_pos, w_box2, h_box2,
                         "Terminal Python — Output Eksekusi hitung_sugeno()", term_lines_fz, font_size=8.1, is_terminal=True)
 
-    tb_s32_r = s32.shapes.add_textbox(Inches(6.866), Inches(6.0), w_box2, Inches(1.1))
-    tf_s32_r = tb_s32_r.text_frame
-    tf_s32_r.word_wrap = True
-    p = tf_s32_r.paragraphs[0]
-    p.text = "Hasil eksekusi komputasi kontroler fuzzy menghasilkan nilai diskret rekomendasi yang 100% cocok dengan penurunan matematis manual (selisih nol)."
-    p.font.name = FONT_MATH
-    p.font.size = Pt(9.2)
-    p.font.color.rgb = TEXT_BODY
 
     # ─── PENYIMPANAN PRESENTASI ───────────────────────────────────────────────
     saved_paths = []
