@@ -65,16 +65,17 @@ def set_slide_background(slide):
     fill.fore_color.rgb = BG_COLOR
 
 def add_qr_watermark(slide, qr_path, label="github.com/FIllxe/kangkung-cv-aquaponik"):
-    """Tambahkan QR code mini di pojok kanan bawah setiap slide."""
+    """Tambahkan QR code mini di sudut kanan header (di atas garis pemisah, tidak overlap konten)."""
     if not qr_path or not qr_path.exists():
         return
-    # QR code box mini 1.0 x 1.0 inch, pojok kanan bawah
-    qr_size = Inches(0.95)
-    left_qr = Inches(13.333) - qr_size - Inches(0.18)
-    top_qr  = Inches(7.5) - qr_size - Inches(0.12)
+    # Header area: T=0.28 s/d separator T=1.17 → pakai area ini (tinggi ±0.80")
+    # Slide width = 13.333", content header ends at x≈12.5"
+    qr_size = Inches(0.78)
+    left_qr = Inches(13.333) - qr_size - Inches(0.13)  # pojok kanan: x=12.42"
+    top_qr  = Inches(0.28)                               # di bawah top edge slide, atas header
     slide.shapes.add_picture(str(qr_path), left_qr, top_qr, qr_size, qr_size)
-    # Label URL kecil di bawah QR
-    tb_lbl = slide.shapes.add_textbox(left_qr - Inches(0.6), top_qr + qr_size + Inches(0.01), qr_size + Inches(0.6), Inches(0.18))
+    # Label URL kecil di bawah QR (masih dalam area header)
+    tb_lbl = slide.shapes.add_textbox(left_qr - Inches(0.3), top_qr + qr_size + Inches(0.01), qr_size + Inches(0.3), Inches(0.13))
     tf_lbl = tb_lbl.text_frame
     tf_lbl.word_wrap = False
     tf_lbl.margin_left = tf_lbl.margin_top = tf_lbl.margin_right = tf_lbl.margin_bottom = 0
@@ -82,7 +83,7 @@ def add_qr_watermark(slide, qr_path, label="github.com/FIllxe/kangkung-cv-aquapo
     p_lbl.text = label
     p_lbl.alignment = PP_ALIGN.RIGHT
     p_lbl.font.name = FONT_CODE
-    p_lbl.font.size = Pt(5.5)
+    p_lbl.font.size = Pt(5.0)
     p_lbl.font.color.rgb = TEXT_MUTED
 
 def add_header(slide, tag_text, title_text, is_backup=False):
