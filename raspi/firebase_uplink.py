@@ -8,6 +8,8 @@ Gagal koneksi: file tetap di outbox/ -> dikirim ulang pada siklus berikutnya.
 """
 import json
 import shutil
+import base64
+import cv2
 from pathlib import Path
 
 _firebase_ready = False
@@ -49,7 +51,12 @@ def push_doc(payload: dict, collection: str):
 
 
 def sync_outbox(cfg) -> int:
-    """Kirim semua payload di outbox/. Return jumlah dokumen terkirim."""
+    """Kirim semua payload di outbox/. Return jumlah dokumen terkirim.
+
+    Upload snapshot ke Storage bersifat opsional — bila gagal (mis. bucket
+    belum aktif / paket gratis), payload tetap dikirim ke Firestore dengan
+    snapshot_url = null agar dashboard tetap bisa menampilkan data secara live.
+    """
     outbox = Path(cfg["outbox_dir"])
     if not outbox.exists() or not init(cfg):
         return 0
@@ -61,10 +68,31 @@ def sync_outbox(cfg) -> int:
             payload = json.loads(json_path.read_text(encoding="utf-8"))
             doc_id = payload["doc_id"]
             jpg = outbox / f"{doc_id}.jpg"
+
+            # ── Upload snapshot (opsional) ──────────────────────────────
             if jpg.exists():
-                payload["snapshot_url"] = upload_snapshot(
-                    jpg, payload["device_id"], doc_id)
-                jpg.replace(sent_dir / jpg.name)
+                try:
+                    payload["snapshot_url"] = upload_snapshot(
+                        jpg, payload["device_id"], doc_id)
+                    jpg.replace(sent_dir / jpg.name)
+                except Exception as e:
+                    # Storage gagal (404 bucket, dll.) — fallback ke base64 thumbnail
+                    # agar gambar snapshot tetap tampil langsung di web dashboard
+                    try:
+                        im = cv2.imread(str(jpg))
+                        h, w = im.shape[:2]
+                        if w > 480:
+                            im = cv2.resize(im, (480, int(h * 480 / w)))
+                        _, buf = cv2.imencode('.jpg', im, [cv2.IMWRITE_JPEG_QUALITY, 55])
+                        b64 = base64.b64encode(buf.tobytes()).decode('ascii')
+                        payload["snapshot_url"] = f"data:image/jpeg;base64,{b64}"
+                        jpg.replace(sent_dir / jpg.name)
+                        print(f"[UPLINK] storage gagal, memakai fallback base64 inline ({len(b64)} B)")
+                    except Exception as e_b64:
+                        payload["snapshot_url"] = None
+                        print(f"[UPLINK] storage gagal {doc_id}: {e} (tanpa gambar)")
+
+            # ── Push ke Firestore (wajib) ───────────────────────────────
             push_doc(payload, cfg["firebase"]["collection"])
             json_path.replace(sent_dir / json_path.name)
             terkirim += 1

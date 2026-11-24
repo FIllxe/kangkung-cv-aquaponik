@@ -247,7 +247,12 @@ gland_d          = is_undef(gland_d_ov)          ? 16.0 : gland_d_ov;
 // perlu pin pivot. TAPI kencangkan ulang berkala karena siklus panas dan
 // getaran bisa melonggarkan sambungan ini.
 paddle_tebal     = is_undef(paddle_tebal_ov)     ? 10.0 : paddle_tebal_ov;
-paddle_lebar     = is_undef(paddle_lebar_ov)     ? 22.0 : paddle_lebar_ov;
+// paddle_lebar: 22 -> 36. Alasan: paddle_jarak_baut = 13 mm berarti pusat
+// lubang baut cuma 13 mm dari sumbu, sedangkan lebar lama 22 + fillet r2
+// hanya memberi tepi di 13 mm - lubang tap setengahnya keluar dari tepi
+// paddle (dinding tepi nol). Dengan 36 mm, tepi jadi 20 mm dari sumbu dan
+// dinding antara lubang dan tepi cukup kuat (~5 mm) untuk self-tap M4.
+paddle_lebar     = is_undef(paddle_lebar_ov)     ? 36.0 : paddle_lebar_ov;
 paddle_tinggi    = is_undef(paddle_tinggi_ov)    ? 24.0 : paddle_tinggi_ov;
 paddle_jarak_baut= is_undef(paddle_jarak_baut_ov)? 13.0 : paddle_jarak_baut_ov;
 paddle_tap_d     = is_undef(paddle_tap_d_ov)     ? 3.4  : paddle_tap_d_ov;  // self-tap M4

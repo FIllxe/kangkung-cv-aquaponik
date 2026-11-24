@@ -18,35 +18,88 @@
 | `rekomendasi` | string | ✅ | teks rekomendasi, tanpa emoji |
 | `zona` | map | ✅ | **24 entri** `R{1-4}C{1-6}` → `{coverage, status, pct_kuning, pct_coklat, kesehatan}` |
 | `kesehatan` | map | ✅ | `{kuning_rata, coklat_rata, distribusi, rekomendasi}` — ringkasan gejala daun seluruh bed |
-| `fuzzy_input` | map | ✅ | input crisp untuk tim fuzzy: `{kuning_pct, coklat_pct, zona_sakit, psi, psi_maks, psi_versi, indeks_sehat}` — definisi PSI di bawah |
+| `fuzzy_input` | map | ✅ | input crisp untuk tim fuzzy: `{green_pixels, yellow_pixels, brown_pixels, classified_pixels, kuning_pct, coklat_pct, zona_sakit, psi, psi_maks, valid, reason, psi_versi, frame_id, captured_at_ms, indeks_sehat}` — definisi PSI di bawah |
 | `snapshot_url` | string/null | ⬜ | URL foto di Storage (isi setelah upload PNG/JPG) |
 | `suhu_pi_c` | number/null | ⬜ | suhu SoC Pi saat capture (untuk monitoring ketahanan hardware) |
 
 **Doc ID:** `{device_id}_{YYYYmmddTHHMMSS}` — contoh: `pi-bed-01_20260903T211532`
 
-## Kontrak PSI (Plant Stress Index) — baru di v1.1
+## Kontrak PSI (Plant Stress Index) — v2.0
 
 `fuzzy_input.psi` = skalar **0–100, TINGGI = makin stres**, dihitung di satu
 sumber tunggal: `kangkung_cv.hitung_psi()`.
 
 ```
-PSI = 100 × min(1, 0.4·min(kuning/25, 1) + 0.6·min(coklat/8, 1))
-     └ normalisasi ke ambang KESEHATAN: kuning_sakit = 25%, coklat_sakit = 8%
+N   = G + Y + B                    (jumlah PIKSEL MENTAH hijau/kuning/cokelat)
+PSI = 100 * (0.5*Y + B) / N        (presisi float64, pembulatan hanya saat tampil)
 ```
+
+**Bobot kategori:** hijau 0, kuning 0,5, cokelat 1. Bobot itu **urutan kategori**
+pada indeks — bobot 0,5 **tidak** berarti daun kuning stres fisiologis 50%.
+
+| Properti | Nilai |
+|---|---|
+| PSI 0 | hanya bila **semua** piksel hijau |
+| PSI 50 | semua piksel kuning (campuran lain juga bisa 50) |
+| PSI 100 | hanya bila **semua** piksel cokelat |
+| Jenuh? | **Tidak.** Linier — gradien tetap ada sampai 100% piksel cokelat |
+
+Mengapa bukan rumus v1.0 `100·min(1, 0,4·min(K/25,1) + 0,6·min(C/8,1))`: rumus itu
+memetakan PSI 100 ke "setara ambang sakit" (kuning 25% / coklat 8%) sehingga
+mentok jauh sebelum nekrosis penuh. Mengapa bukan rumus paling awal
+`min(100, 2·kuning + 5·coklat)`: mentok di 20% coklat / 50% kuning sehingga fuzzy
+kehilangan gradien justru di area paling penting (bukti: `python cek_psi.py`).
+
+### Agregasi bed — jumlahkan piksel, JANGAN rata-rata PSI
+
+PSI global dihitung dari **penjumlahan G, Y, B seluruh zona**, bukan rata-rata
+PSI per zona. Luas tanaman tiap zona berbeda, jadi rata-rata memberi bobot sama
+pada zona jarang dan zona rapat.
+
+> Zona A: 900 px hijau (PSI 0) + Zona B: 100 px cokelat (PSI 100)
+> → global = 100·100/1000 = **10**, bukan rata-rata 50.
+
+Grid kosong tidak menambah piksel. Jika semua grid kosong → hasil **tidak valid**.
+
+### Field
 
 | Field | Arti |
 |---|---|
-| `psi` | severity agregat bed (rata-rata 24 zona) |
-| `psi_maks` | PSI **zona terburuk**. 1 zona mati di 24 hanya menyumbang 1/24 ke rata-rata, jadi dikirim terpisah agar tidak hilang |
-| `psi_versi` | versi rumus (`"1.0"`) — penerima wajib **menolak** versi tak dikenal |
+| `psi` | severity agregat bed (0–100), dari total piksel |
+| `psi_maks` | PSI **zona terburuk**. 1 zona mati di 24 hanya menyumbang 1/24 ke agregat, jadi dikirim terpisah agar tidak hilang |
+| `valid` | boolean — apakah `psi` boleh dibaca. **Wajib** diperiksa pembaca |
+| `reason` | kode alasan: `ok`, `camera_error`, `empty_frame`, `no_plant_pixels`, `insufficient_plant_area`, `mask_overlap`, `excessive_unclassified`, `bad_frame_quality`, `invalid_counts`, `invalid_psi` |
+| `green_pixels`, `yellow_pixels`, `brown_pixels` | jumlah piksel mentah (masukan rumus) |
+| `classified_pixels` | N = G + Y + B (pembaca bisa memeriksa silang PSI) |
+| `kuning_pct`, `coklat_pct` | % gejala thd piksel tanaman — **tampilan**, bukan masukan rumus |
+| `psi_versi` | versi rumus (`"2.0"`) — penerima wajib **menolak** versi tak dikenal |
+| `captured_at_ms` | Unix epoch **milidetik** saat frame diambil (jam perangkat harus tersinkronisasi) |
+| `frame_id` | identitas unik frame |
 | `indeks_sehat` | **legacy**, arah berlawanan = `100 − psi`. Jangan dipakai sebagai input fuzzy baru |
 
-Mengapa bukan rumus lama `min(100, 2·kuning + 5·coklat)`: rumus itu **mentok di
-20% coklat / 50% kuning**, sehingga fuzzy kehilangan gradien justru di area paling
-penting (bukti: `python cek_psi.py` → kolom "jenuh?").
+### Hasil tidak valid — aturan wajib
+
+`psi = 0` adalah hasil **sah** (kanopi hijau). Ia **tidak boleh** dipakai sebagai
+pengganti kegagalan kamera atau ketiadaan tanaman. Membedakan lewat `valid`:
+
+| Kondisi | `valid` | `psi` | `reason` |
+|---|---|---|---|
+| Semua hijau | `true` | `0` | `ok` |
+| Kamera gagal / frame kosong | `false` | `null` | `camera_error` / `empty_frame` |
+| Tanpa piksel tanaman (N = 0) | `false` | `null` | `no_plant_pixels` |
+| Luas tanaman di bawah batas kalibrasi | `false` | `null` | `insufficient_plant_area` |
+| Tak terklasifikasi > batas | `false` | `null` | `excessive_unclassified` |
+
+Jangan mengirim NaN/Infinity. Pada hasil tidak valid **hapus** field `psi` lama
+bersamaan dengan `valid=false`; jangan membiarkan nilai lama tampak valid
+(pada Firebase Realtime Database, `null` menghapus field).
 
 ⚠ **Terminologi:** "PSI" di proyek ini = *Plant Stress Index*, **bukan**
 *Photosystem I* (fisiologi tumbuhan). Selalu tulis lengkap di laporan.
+
+> **Sumber:** definisi & bobot ini mengikuti kesepakatan spesifikasi bersama
+> (Rafly Akbar Anggara, 13 Oktober 2026). Bobot kategori merupakan keputusan
+> rancangan proyek, bukan rumus yang diambil dari artikel literatur.
 
 Rekomendasi set fuzzy (untuk tim fuzzy — perlu disepakati bersama):
 

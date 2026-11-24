@@ -13,7 +13,7 @@ Storage — tidak mengirim perintah apa pun ke Pi (Pi tetap *push-only*).
 | Snapshot terakhir | Gambar beranotasi dari Firebase Storage (`snapshot_url`) |
 | Grafik riwayat | Kurva `coverage_rata` dari maks 144 dokumen terakhir (±24 jam) + garis ambang 25/55/80%, hover untuk nilai |
 | Distribusi | Jumlah zona per status panen & per status kesehatan daun |
-| Rekomendasi & fuzzy | Teks rekomendasi + `fuzzy_input` (`kuning_pct`, `coklat_pct`, `zona_sakit`, `psi`, `psi_maks`, `psi_versi`, `indeks_sehat` legacy) sebagai input kontroler fuzzy. Kartu utama menampilkan **PSI 0–100, makin tinggi = makin stres** (bukan "makin sehat") |
+| Rekomendasi & fuzzy | Teks rekomendasi + `fuzzy_input` (`green/yellow/brown_pixels`, `classified_pixels`, `kuning_pct`, `coklat_pct`, `zona_sakit`, `psi`, `psi_maks`, `valid`, `reason`, `psi_versi`, `frame_id`, `captured_at_ms`, `indeks_sehat` legacy) sebagai input kontroler fuzzy. Kartu utama menampilkan **PSI 0–100, makin tinggi = makin stres** (bukan "makin sehat") |
 | Zona perlu perhatian | Daftar prioritas: sakit → waspada → over-dense |
 | Indikator | `LIVE` / `TERPUTUS` / `MENUNGGU DATA` / `MODE DEMO` + “update x menit lalu” |
 

@@ -190,31 +190,39 @@ ex = (mode == "ledakan") ? explode_n : 0;
 // Alpha dinding: 0,22 saat mode xray, 1 saat rapat.
 al = (mode == "xray") ? 0.22 : 1;
 
-phantom_hollow();
+// Phantom HANYA untuk mode rakit/xray (cek clearance). Pada mode ledakan
+// dimatikan supaya exploded view di laporan bersih: hanya part cetak.
+if (mode != "ledakan") phantom_hollow();
 
-// Klem + lengan. Pada mode ledakan klem turun dan lengan naik supaya bidang
-// mating terlihat lepas.
-translate([0, 0, -ex])                 color("DimGray", al) mount_base_isi();
-translate([0, 0, mount_z_mating + ex]) color("DimGray", al) arm();
+// Klem + lengan. Pada mode ledakan klem turun 0,7 ex dan lengan naik
+// 0,3 ex supaya bidang mating flange-klem terlihat terpisah, tanpa membuat
+// jarak antar part tidak proporsional.
+translate([0, 0, -0.7 * ex])                 color("DimGray", al) mount_base_isi();
+translate([0, 0, mount_z_mating + 0.3 * ex]) color("DimGray", al) arm();
 
 // Kepala: box + phantom + jepit + tutup, semuanya di dalam kerangka transform
 // yang SAMA (kepala_transform + kepala_dasar), jadi tidak mungkin salah tempat.
-translate([0, 0, 2 * ex])
+// Pada mode ledakan kepala digeser MENJAUH ke +X (sepanjang sumbu lengan)
+// DAN ke atas, supaya muka paddle benar-benar lepas dari pelat ujung lengan
+// dan siluet box tidak lagi memotong batang lengan ("lengan menembus box").
+translate([1.1 * ex, 0, 1.6 * ex])
 kepala_transform() kepala_dasar() {
     // Bodi enclosure (transparan saat mode xray)
     color("DimGray", al) enclosure_bodi();
 
-    // Isi box
-    phantom_kamera();
-    phantom_ribbon();
-    phantom_raspi();
+    // Isi box (phantom) - dimatikan pada mode ledakan, lihat catatan di atas
+    if (mode != "ledakan") {
+        phantom_kamera();
+        phantom_ribbon();
+        phantom_raspi();
+    }
 
-    // Jepit kamera: naik sebesar ex pada mode ledakan
-    translate([0, 0, ex])   color("SteelBlue") camera_holder_isi();
+    // Jepit kamera: menjauh ke atas dari dasar box pada mode ledakan
+    translate([0, 0, 1.2 * ex])   color("SteelBlue") camera_holder_isi();
 
     // Tutup: duduk di puncak box, dibalik 180 derajat supaya skirt masuk ke
-    // bawah. Pada mode ledakan naik 2x ex supaya terpisah dari jepit.
-    translate([0, 0, encl_d + 2 * ex])
+    // bawah. Pada mode ledakan naik paling jauh (2,4 ex) di atas jepit kamera.
+    translate([0, 0, encl_d + 2.4 * ex])
         rotate([180, 0, 0]) color("SlateGray") enclosure_tutup();
 }
 

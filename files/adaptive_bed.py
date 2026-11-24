@@ -15,14 +15,15 @@
     Q = keluar   S = snapshot PNG
 
   ALUR:
-    1. Frame pertama → deteksi otomatis 4 sudut bed (mask HSV + kontur)
+    1. Frame pertama → deteksi otomatis 4 sudut bed (Canny Edge → approx quad;
+       jalur cadangan maska HSV bila Canny gagal)
     2. Gagal? → fallback klik manual 4 sudut
     3. Setiap frame: warp perspektif ke kanvas 1200x660 (2m x 1.1m)
        → grid 4x6 → segmentasi tanaman → coverage & status per zona
     4. Sudut dihaluskan EMA (anti-gemetar) + re-deteksi tiap --detect-every
 
-  Basis metode: segmentasi warna HSV + analisis kontur (Searson 2017;
-  Yang 2015) + homografi 4-titik (projective transform).
+  Basis metode: deteksi tepi Canny (Canny 1986) + aproksimasi quad +
+  segmentasi warna HSV (Searson 2017; Yang 2015) + homografi 4-titik.
 =============================================================================
 """
 
@@ -37,7 +38,8 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kangkung_cv import (BED_CONFIG, HSV_KANGKUNG, get_status,
-                         get_kesehatan, parameter_adaptif)
+                         get_kesehatan, parameter_adaptif,
+                         segmentasi_hijau_adaptif)
 
 # ─── Konfigurasi ─────────────────────────────────────────────────────────────
 KANVAS_W, KANVAS_H = 1200, 660          # kanvas warp tetap (2m x 1.1m)
@@ -74,15 +76,376 @@ class CornerSmoother:
         return self.pts.copy()
 
 
-# ─── DETEKSI OTOMATIS (OPSI A) ───────────────────────────────────────────────
+# ─── DETEKSI OTOMATIS (OPSI A: CANNY EDGE + FALLBACK HSV) ────────────────────
 
-def deteksi_sudut_bed(frame, h_lo=0, h_hi=179, s_lo=0, s_hi=255,
+def _intersect_lines(l1, l2):
+    """Titik potong dua garis (vx, vy, x0, y0) atau None jika sejajar."""
+    vx1, vy1, x1, y1 = l1
+    vx2, vy2, x2, y2 = l2
+    det = vx1 * (-vy2) - vy1 * (-vx2)
+    if abs(det) < 1e-6:
+        return None
+    t = ((x2 - x1) * (-vy2) - (y2 - y1) * (-vx2)) / det
+    return (float(x1 + t * vx1), float(y1 + t * vy1))
+
+
+def validasi_quad(pts, w, h, min_area_ratio=0.12, max_area_ratio=0.94):
+    """Validasi geometri quad: konveks, dalam batas frame, sudut & rasio bed."""
+    if pts is None or len(pts) != 4:
+        return False
+    pts = urutkan_sudut(pts)
+    if not cv2.isContourConvex(pts.astype(np.float32)):
+        return False
+    xs, ys = pts[:, 0], pts[:, 1]
+    if (xs.min() < -w * 0.10 or ys.min() < -h * 0.08 or
+            xs.max() > w * 1.12 or ys.max() > h * 1.12):
+        return False
+    frac = cv2.contourArea(pts.astype(np.float32)) / float(max(1, w * h))
+    if frac < min_area_ratio or frac > max_area_ratio:
+        return False
+
+    for i in range(4):
+        p0 = pts[i]
+        v1, v2 = pts[(i - 1) % 4] - p0, pts[(i + 1) % 4] - p0
+        n1, n2 = float(np.linalg.norm(v1)), float(np.linalg.norm(v2))
+        if n1 < 25.0 or n2 < 25.0:
+            return False
+        ang = float(np.degrees(np.arccos(np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0))))
+        if ang < 50.0 or ang > 130.0:
+            return False
+
+    w_top = float(np.linalg.norm(pts[1] - pts[0]))
+    w_bot = float(np.linalg.norm(pts[2] - pts[3]))
+    h_lt = float(np.linalg.norm(pts[3] - pts[0]))
+    h_rt = float(np.linalg.norm(pts[2] - pts[1]))
+    w_avg, h_avg = 0.5 * (w_top + w_bot), 0.5 * (h_lt + h_rt)
+    if h_avg < 30.0 or w_avg < 40.0 or not (1.10 <= (w_avg / h_avg) <= 3.20):
+        return False
+    if max(w_top, w_bot) / max(1.0, min(w_top, w_bot)) > 2.1:
+        return False
+    if max(h_lt, h_rt) / max(1.0, min(h_lt, h_rt)) > 2.1:
+        return False
+    return True
+
+
+def _deteksi_canny_contour_quad(frame, canny_lo=None, canny_hi=None,
+                                min_area_ratio=0.12):
+    """Canny Edge -> kontur tertutup -> approxPolyDP 4 titik tervalidasi."""
+    h, w = frame.shape[:2]
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    if canny_lo is not None and canny_hi is not None:
+        thresholds = [(int(canny_lo), int(canny_hi))]
+    else:
+        med = float(np.median(blur))
+        thresholds = [
+            (max(15, int(0.40 * med)), min(190, int(1.25 * med))),
+            (20, 60),
+            (40, 120),
+        ]
+
+    best, best_area = None, 0.0
+    k3 = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    for lo, hi in thresholds:
+        edges = cv2.morphologyEx(cv2.Canny(blur, lo, hi), cv2.MORPH_CLOSE, k3)
+        cnts, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        for c in cnts:
+            area = cv2.contourArea(c)
+            if area < min_area_ratio * w * h or area > 0.90 * w * h:
+                continue
+            peri = cv2.arcLength(c, True)
+            approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+            if len(approx) != 4:
+                continue
+            pts = urutkan_sudut(approx.reshape(-1, 2).astype(np.float32))
+            if not validasi_quad(pts, w, h, min_area_ratio=min_area_ratio,
+                                 max_area_ratio=0.90):
+                continue
+            xs, ys = pts[:, 0], pts[:, 1]
+            touches = (int(xs.min() <= 4) + int(ys.min() <= 4) +
+                       int(xs.max() >= w - 5) + int(ys.max() >= h - 5))
+            if touches >= 3:
+                continue
+            if area > best_area:
+                best_area, best = area, pts
+    return best
+
+
+def _extract_side_lines(edge_mask, orient, ws, hs, scale, side_name, limit=5):
+    """Fit top-K garis lurus teratas pada masker tepi Canny terarah via Hough+Huber."""
+    py, px = np.where(edge_mask > 0)
+    if len(px) < 8:
+        return []
+    pts_eval = np.column_stack([px, py]).astype(np.float32)
+
+    em = cv2.dilate(edge_mask, np.ones((3, 3), np.uint8))
+    min_len = max(10, int((ws * 0.05) if orient == "H" else (hs * 0.045)))
+    lines = cv2.HoughLinesP(em, 1, np.pi / 180, threshold=10,
+                            minLineLength=min_len,
+                            maxLineGap=max(10, int(35 * scale)))
+    if lines is None:
+        return []
+
+    segs = lines[:, 0].astype(np.float32)
+    dx, dy = segs[:, 2] - segs[:, 0], segs[:, 3] - segs[:, 1]
+    L = np.hypot(dx, dy)
+    ang = np.degrees(np.arctan2(np.abs(dy), np.abs(dx)))
+    ok = (L >= 5.0) & ((ang <= 24.0) if orient == "H" else (ang >= 44.0))
+    segs, dx, dy, L = segs[ok], dx[ok], dy[ok], L[ok]
+    if len(segs) == 0:
+        return []
+    if len(segs) > 36:
+        order = np.argsort(L)[::-1][:36]
+        segs, dx, dy, L = segs[order], dx[order], dy[order], L[order]
+
+    vx, vy = dx / L, dy / L
+    tol = max(2.5, 4.5 * scale)
+    dist = np.abs(vx[:, None] * (py[None, :] - segs[:, 1:2]) -
+                  vy[:, None] * (px[None, :] - segs[:, 0:1]))
+    inl_mat = dist <= tol
+
+    cands = []
+    for i in range(len(segs)):
+        inl = inl_mat[i]
+        cnt = int(inl.sum())
+        if cnt < 8:
+            continue
+        in_pts = pts_eval[inl]
+        proj = ((in_pts[:, 0] - segs[i, 0]) * vx[i] +
+                (in_pts[:, 1] - segs[i, 1]) * vy[i])
+        span = float(proj.max() - proj.min())
+        if span < 18.0:
+            continue
+        n_bins = max(5, int(span / max(5.0, 10.0 * scale)))
+        hist, _ = np.histogram(proj, bins=n_bins,
+                               range=(float(proj.min()), float(proj.max())))
+        cont = float((hist > 0).mean())
+        if side_name == "left":
+            outer_b = 1.0 + 0.35 * max(0.0, 1.0 - in_pts[:, 0].mean() / (ws * 0.42))
+        elif side_name == "right":
+            outer_b = 1.0 + 0.35 * max(0.0, (in_pts[:, 0].mean() - ws * 0.58) / (ws * 0.42))
+        elif side_name == "top":
+            outer_b = 1.0 + 0.25 * max(0.0, 1.0 - in_pts[:, 1].mean() / (hs * 0.50))
+        else:
+            outer_b = 1.0 + 0.25 * max(0.0, (in_pts[:, 1].mean() - hs * 0.50) / (hs * 0.50))
+        norm_len = ws * 0.65 if orient == "H" else hs * 0.55
+        sc = cnt * (0.3 + 0.7 * cont) * min(1.0, span / norm_len) * outer_b
+        cands.append((sc, span, in_pts))
+
+    cands.sort(key=lambda x: x[0], reverse=True)
+    out = []
+    for sc, span, in_pts in cands:
+        fx, fy, x0, y0 = cv2.fitLine(in_pts, cv2.DIST_HUBER, 0, 0.01, 0.01).ravel()
+        fx, fy, x0, y0 = float(fx), float(fy), float(x0), float(y0)
+        if orient == "H":
+            t_m = (ws * 0.5 - x0) / fx if abs(fx) > 1e-4 else 0.0
+            pos, slope = y0 + t_m * fy, (fy / fx if abs(fx) > 1e-4 else 0.0)
+        else:
+            t_m = (hs * 0.5 - y0) / fy if abs(fy) > 1e-4 else 0.0
+            pos, slope = x0 + t_m * fx, (fx / fy if abs(fy) > 1e-4 else 0.0)
+        if any(abs(pos - up) < max(5.0, 12.0 * scale) and abs(slope - us) < 0.06
+               for _, _, _, up, us in out):
+            continue
+        out.append((sc, span, (fx, fy, x0, y0), pos, slope))
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _deteksi_canny_rim_quad(frame, canny_lo=None, canny_hi=None,
+                            min_area_ratio=0.12):
+    """
+    Deteksi 4 sisi tepi bed dari Canny Edge pada bingkai berlawanan dengan
+    interior bed, tangguh terhadap pantulan langit & oklusi daun sebagian.
+    """
+    h, w = frame.shape[:2]
+    scale = min(1.0, 512.0 / w)
+    fr = cv2.resize(frame, (int(w * scale), int(h * scale))) if scale < 1.0 else frame
+    hs, ws = fr.shape[:2]
+
+    gray = cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY)
+    blur = cv2.medianBlur(gray, 5)
+    hsv = cv2.cvtColor(cv2.GaussianBlur(fr, (5, 5), 0), cv2.COLOR_BGR2HSV)
+    H_ch, S_ch, V_ch = cv2.split(hsv)
+    V_i16 = V_ch.astype(np.int16)
+
+    rim_raw = (((S_ch <= 75) & (V_ch >= 126)) |
+               ((S_ch <= 45) & (V_ch >= 112))).astype(np.uint8) * 255
+    rim_solid = cv2.morphologyEx(
+        rim_raw, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+    rim_solid = cv2.morphologyEx(
+        rim_solid, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+    is_rim = rim_solid > 0
+
+    is_green = (H_ch >= 25) & (H_ch <= 92) & (S_ch >= 42) & (V_ch >= 35)
+    is_water = (V_ch <= 145) & (S_ch <= 60) & (~is_rim)
+    is_bed_in = is_green | is_water | ((V_ch <= 120) & (~is_rim))
+    is_red_soil = ((H_ch <= 18) | (H_ch >= 165)) & (S_ch >= 75) & (V_ch >= 50)
+    is_pond_tarp = (H_ch >= 78) & (H_ch <= 105) & (S_ch >= 85) & (V_ch <= 155)
+
+    if canny_lo is None or canny_hi is None:
+        med = float(np.median(blur))
+        canny_lo = int(max(18, 0.40 * med))
+        canny_hi = int(min(190, 1.25 * med))
+
+    edges = cv2.Canny(blur, canny_lo, canny_hi)
+    n_lbl, lbl, stats, _ = cv2.connectedComponentsWithStats(edges, connectivity=8)
+    valid_cc = np.zeros(n_lbl, dtype=np.uint8)
+    if n_lbl > 1:
+        keep_cc = (
+            (np.maximum(stats[1:, cv2.CC_STAT_WIDTH], stats[1:, cv2.CC_STAT_HEIGHT])
+             >= max(8, int(18 * scale))) |
+            (stats[1:, cv2.CC_STAT_AREA] >= max(10, int(20 * scale)))
+        )
+        valid_cc[1:] = keep_cc.astype(np.uint8) * 255
+    ed = valid_cc[lbl]
+
+    ys_e, xs_e = np.where(ed > 0)
+    keep = (xs_e > 2) & (xs_e < ws - 3) & (ys_e > 2) & (ys_e < hs - 3)
+    xs_e, ys_e = xs_e[keep], ys_e[keep]
+    if len(xs_e) < 30:
+        return None
+
+    o1, o2 = max(3, int(9 * scale)), max(6, int(17 * scale))
+    yu1, yu2 = np.clip(ys_e - o1, 0, hs - 1), np.clip(ys_e - o2, 0, hs - 1)
+    yd1, yd2 = np.clip(ys_e + o1, 0, hs - 1), np.clip(ys_e + o2, 0, hs - 1)
+    xl1, xl2 = np.clip(xs_e - o1, 0, ws - 1), np.clip(xs_e - o2, 0, ws - 1)
+    xr1, xr2 = np.clip(xs_e + o1, 0, ws - 1), np.clip(xs_e + o2, 0, ws - 1)
+
+    step_t = (np.maximum(V_i16[yu1, xs_e], V_i16[yu2, xs_e]) - V_i16[yd1, xs_e]) >= 12
+    step_b = (np.maximum(V_i16[yd1, xs_e], V_i16[yd2, xs_e]) - V_i16[yu1, xs_e]) >= 12
+    step_l = (np.maximum(V_i16[ys_e, xl1], V_i16[ys_e, xl2]) - V_i16[ys_e, xr1]) >= 12
+    step_r = (np.maximum(V_i16[ys_e, xr1], V_i16[ys_e, xr2]) - V_i16[ys_e, xl1]) >= 12
+
+    side_idx = {
+        "top": (is_rim[yu1, xs_e] | is_rim[yu2, xs_e]) & step_t & (is_bed_in[yd1, xs_e] & ~is_rim[yd1, xs_e]) & (~is_green[yu1, xs_e]) & (ys_e < hs * 0.55),
+        "bot": (is_rim[yd1, xs_e] | is_rim[yd2, xs_e]) & step_b & (is_bed_in[yu1, xs_e] & ~is_rim[yu1, xs_e]) & (~is_green[yd1, xs_e]) & (ys_e > hs * 0.45),
+        "left": (is_rim[ys_e, xl1] | is_rim[ys_e, xl2]) & step_l & (is_bed_in[ys_e, xr1] & ~is_rim[ys_e, xr1]) & (~is_green[ys_e, xl1]) & (xs_e < ws * 0.42),
+        "right": (is_rim[ys_e, xr1] | is_rim[ys_e, xr2]) & step_r & (is_bed_in[ys_e, xl1] & ~is_rim[ys_e, xl1]) & (~is_green[ys_e, xr1]) & (xs_e > ws * 0.58),
+    }
+
+    masks = {}
+    for k, idx in side_idx.items():
+        m = np.zeros((hs, ws), dtype=np.uint8)
+        m[ys_e[idx], xs_e[idx]] = 255
+        masks[k] = m
+
+    c_top = _extract_side_lines(masks["top"], "H", ws, hs, scale, "top", limit=5)
+    c_bot = _extract_side_lines(masks["bot"], "H", ws, hs, scale, "bot", limit=5)
+    c_lt = _extract_side_lines(masks["left"], "V", ws, hs, scale, "left", limit=5)
+    c_rt = _extract_side_lines(masks["right"], "V", ws, hs, scale, "right", limit=5)
+
+    # Jika tepi kanan tertutupi tajuk daun, tambahkan kandidat garis tepi struktural luar
+    rt_used_struct = False
+    if max((sp for _, sp, _, _, _ in c_rt), default=0.0) < hs * 0.60:
+        not_canopy = (~(is_green[ys_e, xl1] & is_green[ys_e, xr1]) &
+                      ~is_red_soil[ys_e, xl1] & ~is_red_soil[ys_e, xr1])
+        rt_struct = np.zeros((hs, ws), dtype=np.uint8)
+        x_lo = int(ws * 0.78)
+        sel = not_canopy & (xs_e >= x_lo) & (xs_e < int(ws * 0.96))
+        rt_struct[ys_e[sel], xs_e[sel]] = 255
+        for item in _extract_side_lines(rt_struct, "V", ws, hs, scale, "right", limit=2):
+            if not any(abs(item[3] - up) < max(5.0, 12.0 * scale) and
+                       abs(item[4] - us) < 0.06 for _, _, _, up, us in c_rt):
+                c_rt.append(item)
+                rt_used_struct = True
+
+    if not (c_top and c_bot and c_lt and c_rt):
+        return None
+
+    sw, sh = 120, 68
+    sx, sy = sw / ws, sh / hs
+    green_s = cv2.resize(is_green.astype(np.uint8), (sw, sh), interpolation=cv2.INTER_NEAREST) > 0
+    bed_s = cv2.resize(is_bed_in.astype(np.uint8), (sw, sh), interpolation=cv2.INTER_NEAREST) > 0
+    rim_s = cv2.resize(is_rim.astype(np.uint8), (sw, sh), interpolation=cv2.INTER_NEAREST) > 0
+    soil_s = cv2.resize(is_red_soil.astype(np.uint8), (sw, sh), interpolation=cv2.INTER_NEAREST) > 0
+    pond_s = cv2.resize(is_pond_tarp.astype(np.uint8), (sw, sh), interpolation=cv2.INTER_NEAREST) > 0
+    tot_green = max(1, int(green_s.sum()))
+
+    k_hit = np.ones((5, 5), np.uint8)
+    edge_hits = {k: cv2.dilate(masks[k], k_hit) > 0 for k in masks}
+    if rt_used_struct:
+        edge_hits["right"] = edge_hits["right"] | (cv2.dilate(rt_struct, k_hit) > 0)
+
+    def _edge_support(pa, pb, hit_map):
+        ts = np.linspace(0.05, 0.95, 17)
+        xs = np.round(pa[0] + ts * (pb[0] - pa[0])).astype(int)
+        ys = np.round(pa[1] + ts * (pb[1] - pa[1])).astype(int)
+        v = (xs >= 0) & (xs < ws) & (ys >= 0) & (ys < hs)
+        return float(hit_map[ys[v], xs[v]].mean()) if v.sum() >= 4 else 0.0
+
+    qmask = np.zeros((sh, sw), dtype=np.uint8)
+    best_pts, best_score = None, -1e9
+    lt_lines = [it[2] for it in c_lt]
+    rt_lines = [it[2] for it in c_rt]
+    for _, _, lt, _, _ in c_top:
+        for _, _, lb, _, _ in c_bot:
+            for ll in lt_lines:
+                tl = _intersect_lines(lt, ll)
+                bl = _intersect_lines(lb, ll)
+                if tl is None or bl is None or bl[1] - tl[1] < hs * 0.20:
+                    continue
+                for lr in rt_lines:
+                    tr = _intersect_lines(lt, lr)
+                    br = _intersect_lines(lb, lr)
+                    if tr is None or br is None:
+                        continue
+                    pts = urutkan_sudut(np.float32([tl, tr, br, bl]))
+                    if not validasi_quad(pts, ws, hs, min_area_ratio=min_area_ratio,
+                                         max_area_ratio=0.94):
+                        continue
+
+                    poly_s = np.round(pts * np.float32([sx, sy])).astype(np.int32).reshape(-1, 1, 2)
+                    qmask.fill(0)
+                    cv2.fillPoly(qmask, [poly_s], 1)
+                    qm = qmask > 0
+                    qa = max(1, int(qm.sum()))
+
+                    in_gr = float((green_s & qm).sum()) / tot_green
+                    in_pur = float((bed_s & qm).sum()) / qa
+                    in_soil = float((soil_s & qm).sum()) / qa
+                    in_pond = float((pond_s & qm).sum()) / qa
+                    in_rim = float((rim_s & qm).sum()) / qa
+
+                    e_t = _edge_support(pts[0], pts[1], edge_hits["top"])
+                    e_r = _edge_support(pts[1], pts[2], edge_hits["right"])
+                    e_b = _edge_support(pts[3], pts[2], edge_hits["bot"])
+                    e_l = _edge_support(pts[0], pts[3], edge_hits["left"])
+                    e_mean = 0.25 * (e_t + e_r + e_b + e_l)
+                    e_min = min(e_t, e_r, e_b, e_l)
+
+                    dx_l = pts[3][0] - pts[0][0]
+                    dx_r = pts[2][0] - pts[1][0]
+                    sym_pen = 0.25 if ((dx_l > 35 * scale and dx_r > 35 * scale) or
+                                       (dx_l < -35 * scale and dx_r < -35 * scale)) else 0.0
+
+                    qsc = (2.1 * in_gr + 1.6 * in_pur + 1.6 * e_mean + 0.9 * e_min
+                           - 2.6 * in_soil - 2.6 * in_pond - 1.6 * in_rim - sym_pen)
+                    if qsc > best_score:
+                        best_score = qsc
+                        best_pts = pts / scale
+    return best_pts
+
+
+def deteksi_sudut_canny(frame, canny_lo=None, canny_hi=None, min_area_ratio=0.12):
+    """
+    Method 1 (Utama): Deteksi tepi Canny → aproksimasi quad 4 sudut tervalidasi.
+    Mendukung garis tepi bingkai lapangan (CannyRim) maupun kontur tertutup
+    bersih (CannyPoly). Return 4 titik (TL,TR,BR,BL) atau None.
+    """
+    pts = _deteksi_canny_rim_quad(frame, canny_lo=canny_lo, canny_hi=canny_hi,
+                                  min_area_ratio=min_area_ratio)
+    if pts is not None:
+        return pts
+    return _deteksi_canny_contour_quad(frame, canny_lo=canny_lo, canny_hi=canny_hi,
+                                       min_area_ratio=min_area_ratio)
+
+
+def deteksi_sudut_hsv(frame, h_lo=0, h_hi=179, s_lo=0, s_hi=255,
                       v_lo=0, v_hi=110, min_area_ratio=0.10):
     """
-    Deteksi 4 sudut bed otomatis:
-    mask HSV (default: area gelap = media tanam) → MORPH_CLOSE besar →
-    kontur terbesar → approxPolyDP quad → fallback minAreaRect.
-    Return 4 titik terurut (TL,TR,BR,BL) atau None jika gagal.
+    Jalur cadangan (fallback): mask HSV area gelap + morfologi + kontur terbesar
+    → approxPolyDP / minAreaRect.
     """
     img = cv2.GaussianBlur(frame, (5, 5), 0)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -110,6 +473,76 @@ def deteksi_sudut_bed(frame, h_lo=0, h_hi=179, s_lo=0, s_hi=255,
     return urutkan_sudut(pts)
 
 
+def _deteksi_sudut_kanopi_bed(frame, min_area_ratio=0.08):
+    """
+    Fallback adaptif berbasis sebaran kanopi tanaman kangkung:
+    Bila tepi pipa/rim bed terhalang oklusi daun lebat atau pantulan intensif,
+    temukan selubung konveks/minAreaRect dari piksel daun hijau terdeteksi,
+    lalu lakukan ekspansi margin proporsional (8-12%) untuk mengestimasi tepi bed.
+    """
+    h, w = frame.shape[:2]
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    mask_green = cv2.inRange(hsv, (24, 28, 25), (96, 255, 255))
+    k = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
+    mask_green = cv2.morphologyEx(mask_green, cv2.MORPH_CLOSE, k)
+
+    cnts, _ = cv2.findContours(mask_green, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return None
+
+    pts_all = []
+    tot_area = 0.0
+    for c in cnts:
+        a = cv2.contourArea(c)
+        if a > 0.005 * w * h:
+            tot_area += a
+            pts_all.append(c)
+
+    if tot_area < min_area_ratio * w * h or not pts_all:
+        return None
+
+    merged = np.vstack(pts_all)
+    rect = cv2.minAreaRect(merged)
+    (cx, cy), (rw, rh), angle = rect
+    if rw < 30 or rh < 30:
+        return None
+
+    scale_margin = 1.08
+    exp_rect = ((cx, cy), (rw * scale_margin, rh * scale_margin), angle)
+    pts = cv2.boxPoints(exp_rect).astype(np.float32)
+    pts = urutkan_sudut(pts)
+
+    if validasi_quad(pts, w, h, min_area_ratio=min_area_ratio, max_area_ratio=0.95):
+        return pts
+    return None
+
+
+def deteksi_sudut_bed(frame, h_lo=0, h_hi=179, s_lo=0, s_hi=255,
+                      v_lo=0, v_hi=110, min_area_ratio=0.10,
+                      canny_lo=None, canny_hi=None, metode="canny"):
+    """
+    Deteksi 4 sudut bed otomatis kontinu (antarmuka terpadu):
+    1. Canny Rim + Poly quad (metode utama berakurasi tinggi)
+    2. Fallback HSV bed gelap / talang
+    3. Fallback cluster kanopi hijau kangkung (bila rim terhalang daun lebat)
+    Return 4 titik (TL,TR,BR,BL) atau None.
+    """
+    if metode != "hsv":
+        pts = deteksi_sudut_canny(frame, canny_lo=canny_lo, canny_hi=canny_hi,
+                                  min_area_ratio=max(min_area_ratio, 0.12))
+        if pts is not None:
+            return pts
+        if metode == "canny_only":
+            return None
+
+    pts_hsv = deteksi_sudut_hsv(frame, h_lo=h_lo, h_hi=h_hi, s_lo=s_lo, s_hi=s_hi,
+                                v_lo=v_lo, v_hi=v_hi, min_area_ratio=min_area_ratio)
+    if pts_hsv is not None:
+        return pts_hsv
+
+    return _deteksi_sudut_kanopi_bed(frame, min_area_ratio=min_area_ratio * 0.8)
+
+
 # ─── WARP PERSPEKTIF ─────────────────────────────────────────────────────────
 
 def matriks_warp(pts):
@@ -124,18 +557,9 @@ def warp_bed(frame, M):
 # ─── SEGMENTASI TANAMAN + GRID (pipeline kangkung_cv) ────────────────────────
 
 def mask_tanaman(bgr, adaptif=True):
-    """Mask tanaman (muda+mature) — range ADAPTIF (f = mean(V)/128) default."""
-    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-    if adaptif:
-        rng = parameter_adaptif(hsv)
-    else:
-        rng = {k: {"lower": HSV_KANGKUNG[k]["lower"],
-                   "upper": HSV_KANGKUNG[k]["upper"]}
-               for k in ("muda", "mature")}
-    m = cv2.bitwise_or(
-        cv2.inRange(hsv, rng["muda"]["lower"],   rng["muda"]["upper"]),
-        cv2.inRange(hsv, rng["mature"]["lower"], rng["mature"]["upper"]))
-    m = cv2.morphologyEx(m, cv2.MORPH_OPEN,
+    """Mask tanaman (muda+mature) dengan optimasi CLAHE V & glare S adaptif."""
+    seg = segmentasi_hijau_adaptif(bgr, adaptif=adaptif)
+    m = cv2.morphologyEx(seg["mask_hijau"], cv2.MORPH_OPEN,
                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
     m = cv2.morphologyEx(m, cv2.MORPH_CLOSE,
                          cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
@@ -145,28 +569,25 @@ def mask_tanaman(bgr, adaptif=True):
 def mask_tanaman_warna(bgr, adaptif=True):
     """
     Mask lengkap 4 kelas warna untuk analisis kesehatan daun:
-      hijau (muda+mature), kuning (klorosis), coklat (nekrosis).
-    Range HSV ADAPTIF (f = mean(V)/128); Hue tidak digeser.
-    Kuning/coklat di-open saja agar bercak kecil tetap terdeteksi.
+      hijau (muda+mature adaptif CLAHE+glare), kuning (klorosis), coklat (nekrosis).
+    Kuning/coklat mempertahankan seed statis pada HSV asli untuk konsistensi PSI.
     Return dict {"hijau", "kuning", "coklat", "tanaman", "info_adaptif"}.
     """
     k3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    k7 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+    seg = segmentasi_hijau_adaptif(bgr, adaptif=adaptif)
+    hsv = seg["hsv_raw"]
+    rng = seg["rng"]
+    info = seg["info"]
 
-    if adaptif:
-        rng = parameter_adaptif(hsv)
-        info = rng["info"]
-    else:
-        rng = {k: {"lower": HSV_KANGKUNG[k]["lower"],
-                   "upper": HSV_KANGKUNG[k]["upper"]}
-               for k in HSV_KANGKUNG}
-        info = {"f": 1.0, "s_lo": 40, "v_lo": 40, "v_hi": 255}
+    hijau = cv2.morphologyEx(seg["mask_hijau"], cv2.MORPH_OPEN, k3)
+    hijau = cv2.morphologyEx(hijau, cv2.MORPH_CLOSE, k7)
 
-    hijau = mask_tanaman(bgr, adaptif=adaptif)
     kuning = cv2.morphologyEx(
         cv2.inRange(hsv, rng["kuning"]["lower"],
                          rng["kuning"]["upper"]),
         cv2.MORPH_OPEN, k3)
+    kuning = cv2.bitwise_and(kuning, cv2.bitwise_not(hijau))
 
     # Coklat hanya valid bila berdekatan dengan kanopi hijau (media tanam
     # juga coklat — lihat catatan di kangkung_cv.segment())
@@ -244,6 +665,86 @@ def analisis_grid(warped):
     hasil = cv2.addWeighted(warped, 0.7, overlay, 0.3, 0)
     rata = float(np.mean(total_cov)) if total_cov else 0.0
     return hasil, rata, siap, rows * cols, zona_list
+
+
+def analisis_bed_lengkap(warped, adaptif=True):
+    """Analisis grid 4x6 lengkap untuk pipeline Raspberry Pi (kangkung_pi & camera_live).
+
+    Mengembalikan dict berisi zona, piksel_zona (G/Y/B disjoint untuk PSI v2.0),
+    coverage_rata, kuning_rata, coklat_rata, status_distribusi, kesehatan_distribusi,
+    dan metadata info_adaptif S/V/CLAHE.
+    """
+    masks = mask_tanaman_warna(warped, adaptif=adaptif)
+    rows, cols = BED_CONFIG["grid_rows"], BED_CONFIG["grid_cols"]
+    H, W = warped.shape[:2]
+    ch, cw = H // rows, W // cols
+
+    zona, covs, kuns, coks, st_kes, piksel = {}, [], [], [], [], []
+    dist = {"belum_siap": 0, "hampir_siap": 0, "siap_panen": 0, "harus_panen": 0}
+
+    for r in range(rows):
+        for c in range(cols):
+            y1, y2 = r * ch, (r + 1) * ch if r < rows - 1 else H
+            x1, x2 = c * cw, (c + 1) * cw if c < cols - 1 else W
+            luas = max(1, (y2 - y1) * (x2 - x1))
+
+            h_zona = masks["hijau"][y1:y2, x1:x2]
+            k_zona = masks["kuning"][y1:y2, x1:x2]
+            b_zona = masks["coklat"][y1:y2, x1:x2]
+            t_zona = masks["tanaman"][y1:y2, x1:x2]
+
+            h_px = int(h_zona.sum()) // 255
+            t_px = int(t_zona.sum()) // 255
+            k_px = int(k_zona.sum()) // 255
+            b_px = int(b_zona.sum()) // 255
+
+            cov = h_px / luas * 100.0
+            pk = k_px / t_px * 100.0 if t_px else 0.0
+            pc = b_px / t_px * 100.0 if t_px else 0.0
+            status = get_status(cov)
+            kes = get_kesehatan(pk, pc)
+            dist[status] += 1
+
+            zona[f"R{r+1}C{c+1}"] = {
+                "coverage": round(cov, 2),
+                "status": status,
+                "pct_kuning": round(pk, 2),
+                "pct_coklat": round(pc, 2),
+                "kesehatan": kes,
+            }
+            covs.append(cov)
+            kuns.append(pk)
+            coks.append(pc)
+            st_kes.append(kes)
+
+            # Konstruksi piksel disjoint untuk kontrak PSI v2.0 (G+Y+B == |tanaman|)
+            k_bukan_b = int(cv2.bitwise_and(k_zona, cv2.bitwise_not(b_zona)).sum()) // 255
+            h_bukan_kb = int(cv2.bitwise_and(
+                h_zona, cv2.bitwise_not(cv2.bitwise_or(k_zona, b_zona))).sum()) // 255
+            piksel.append({
+                "green": h_bukan_kb,
+                "yellow": k_bukan_b,
+                "brown": b_px,
+                "plant_mask": t_px,
+                "unclassified": max(0, t_px - (h_bukan_kb + k_bukan_b + b_px)),
+            })
+
+    siap = dist["siap_panen"] + dist["harus_panen"]
+    return {
+        "zona": zona,
+        "canvas": warped.copy(),
+        "coverage_rata": round(float(np.mean(covs)), 2),
+        "coverage_std": round(float(np.std(covs)), 2),
+        "status_distribusi": dist,
+        "zona_siap_panen": siap,
+        "persen_siap": round(siap / max(1, len(zona)) * 100, 1),
+        "kuning_rata": round(float(np.mean(kuns)), 2),
+        "coklat_rata": round(float(np.mean(coks)), 2),
+        "kesehatan_distribusi": {s: st_kes.count(s)
+                                 for s in ("sehat", "waspada", "sakit")},
+        "piksel_zona": piksel,
+        "info_adaptif": masks.get("info_adaptif", {}),
+    }
 
 
 def gambar_quad(frame, pts, warna=(0, 255, 0), tebal=2):

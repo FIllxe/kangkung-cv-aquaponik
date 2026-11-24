@@ -1,0 +1,6 @@
+ECHO: "[DIMENSI] encl = 143.8 x 90.8 x 56.8 | int = 139 x 86"
+ECHO: "[CLEARANCE] x = 3.5 mm | y = 15 mm"
+ECHO: "[BUKAAN] baris = 129 mm | IR d=40 @ x=-44.5 dan x=31.5 | kamera d=30 @ x=-6.5 | LDR d=10 @ x=59.5"
+ECHO: "[RUSUK]  x=65.5 y=39 z_dasar=39 atap=54.4 tinggi=15.4"
+WARNING: Ignoring unknown variable 'flange_t' in file _dim.scad, line 5
+ECHO: "DIMS encl_d=56.8 encl_w=143.8 encl_h=90.8 mount_z_mating=30 panjang_lengan=150 klem_panjang=20 encl_lid=2.4 flange_t=undef paddle_tinggi=24"

@@ -1,0 +1,15 @@
+[Unit]
+Description=ESP32 <-> Raspberry Pi 4B Bidirectional Telemetry & Actuator Bridge
+After=network-online.target aquaponik-web.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/aquaponic/kangkung_pi
+ExecStart=/home/aquaponic/kangkung_pi/venv/bin/python esp32_bridge.py --port auto --baud 115200 --ble --udp --api-url http://127.0.0.1:8080
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

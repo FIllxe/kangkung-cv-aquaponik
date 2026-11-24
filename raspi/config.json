@@ -1,8 +1,11 @@
 {
   "device_id": "pi-bed-01",
   "video_source": "csi",
+  "camera_rotate": 180,
   "csi_width": 1296,
   "csi_height": 972,
+  "usb_width": 1920,
+  "usb_height": 1080,
   "csi_warmup_detik": 2.0,
   "max_width": 960,
   "interval_menit": 10,

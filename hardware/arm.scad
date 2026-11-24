@@ -58,7 +58,7 @@ module flange_bawah() {
 // lengan "nyangkut" dan susah dilepas.
 module lengan() {
     x0 = mount_out_r + 1;
-    x1 = panjang_lengan - pelat_ujung_panjang / 2;   // batang berhenti di awal pelat
+    x1 = panjang_lengan + pelat_ujung_panjang / 2 - flange_t; // batang berhenti di muka dalam pelat ujung
     panjang = x1 - x0;
     tengah = (x0 + x1) / 2;
     // Baris batang DISETELARASKAN dengan flange (z 0..flange_t), bukan
@@ -79,23 +79,40 @@ module lengan() {
 // --- Pelat ujung: menyambung lengan ke paddle enclosure ---
 // 2x baut M4 x 25 mengunci sudut kemiringan lewat gesekan. Kencangkan ulang
 // berkala: siklus panas dan getaran bisa melonggarkan sambungan ini.
-// CATATAN z: pelat occupy z 0..flange_t, sama seperti flange dan batang, agar
-// muka plates-nya persis di z = flange_t tempat muka luar paddle bertumpu.
-// Versi lama memakai translate([...,flange_t/2]) sehingga pelat ikut bergeser
-// ke z 3..9 dan paddle menusuk 3 mm ke dalam pelat.
+//
+// BUG LAMA (tidak pernah ketahuan karena preview hanya dilihat sekilas):
+// versi sebelumnya membuat pelat sebagai plat HORIZONTAL (linear_extrude
+// profil datar di XY, pelat normal +Z, z 0..flange_t) dengan lubang baut
+// VERTIKAL di (x=panjang_lengan, y=+/-13). Padahal tap hole paddle ada di
+// muka VERTIKAL box (normal +X) sejajar sumbu X pada y=+/-13 dan setinggi
+// pusat paddle (z = flange_t + paddle_tinggi/2 = 18). Akibatnya:
+//   - lubang pelat dan tap paddle tidak pernah sejajar (sumbu Z vs sumbu X)
+//   - pelat (x 138..162) dan paddle (x 162..173) hanya bersinggungan di
+//     satu garis tepi, baut tidak bisa menembus keduanya
+//   - plat horizontal juga menutup jalur box yang turun ke bawah bidang lengan
+// Versi ini: pelat VERTIKAL tebal flange_t di arah X, muka luar = poros pv
+// (titik duduk muka paddle), tinggi menutup seluruh footprint paddle, dan
+// 2 lubang clearance M4 sepanjang sumbu X tepat sejajar tap hole paddle.
 module pelat_ujung() {
-    translate([panjang_lengan, 0, 0])
-        linear_extrude(height = flange_t)
-            difference() {
-                offset(r = 3)
-                    square([24, lebar_lengan], center = true);
-                // Lubang baut harus OBJEK 2D (circle), bukan cylinder:
-                // seluruh blok ini berada di dalam linear_extrude, dan
-                // OpenSCAD tidak mendukung campuran 2D + 3D di satu operasi.
-                for (sy = [-1, 1])
-                    translate([0, sy * paddle_jarak_baut])
-                        circle(d = paddle_clr_d);
-            }
+    z_poros  = flange_t + paddle_tinggi / 2;             // pusat paddle (18)
+    xl_out   = panjang_lengan + pelat_ujung_panjang / 2; // muka luar = poros pv (162)
+    lebar_p  = paddle_lebar + 4;                         // lebar paddle + fillet r2
+    tinggi_p = z_poros + paddle_tinggi / 2 + 2;          // z 0..tinggi_p: tutup paddle penuh
+    translate([xl_out, -lebar_p / 2, 0])
+        rotate([0, -90, 0])                              // profil -> bidang YZ, ekstrusi ke -X
+            // +1 mm: ekstrusi menembus 1 mm ke dalam batang lengan (yang
+            // berhenti di xl_out - flange_t) supaya union punya volume
+            // intersection nyata, bukan cuma bidang bersentuhan - kalau tidak,
+            // CGAL memperingatkan "not a valid 2-manifold" saat ekspor STL.
+            linear_extrude(height = flange_t + 1)
+                difference() {
+                    square([tinggi_p, lebar_p]);
+                    // Lubang clearance M4, sumbu X, sejajar tap paddle
+                    // (y = +/-paddle_jarak_baut, z = z_poros).
+                    for (sy = [-1, 1])
+                        translate([z_poros, lebar_p / 2 + sy * paddle_jarak_baut])
+                            circle(d = paddle_clr_d);
+                }
 }
 
 // =============================================================================
@@ -133,9 +150,20 @@ module kepala_dasar() {
 
 module kepala_transform() {
     // Titik poros = muka luar pelat ujung yang jadi bidang mating dengan
-    // paddle, setinggi pusat paddle.
+    // paddle, setinggi pusat paddle. pv dinyatakan dalam koordinat FRAME
+    // LENGAN (z = 0 = bidang mating flange ke mount), jadi seluruh rangkaian
+    // WAJIB diterjemahkan ke mount_z_mating karena di assembly.scad lengan
+    // duduk di z = mount_z_mating.
+    //
+    // BUG LAMA: translate([0,0,mount_z_mating]) tidak ada, sehingga kepala
+    // (box + paddle) terlalu rendah 30 mm pada klem hollow / 6 mm pada
+    // tipe pipa. Geometri lama itu sumber tiga gejala sekaligus:
+    //   - profil depan: paddle menggantung jauh di bawah pelat ujung lengan
+    //   - lubang pelat dan tap paddle tidak sejajar vertikal
+    //   - mode ledakan: batang lengan kelihatan menembus box
     pv = [panjang_lengan + pelat_ujung_panjang / 2, 0,
           flange_t + paddle_tinggi / 2];
+    translate([0, 0, mount_z_mating])
     translate(pv)
         rotate([0, sudut_kemiringan, 0])        // kemiringan terhadap pose dasar
             translate([-pv[0], 0, -pv[2]])     // geser poros ke titik asal

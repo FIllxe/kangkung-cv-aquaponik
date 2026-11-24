@@ -35,8 +35,9 @@ Video/Kamera → Deteksi Bed (Canny edge / HSV) → Warp Perspektif → Grid 4×
 | `files/` | Pipeline utama: `proses_video.py`, `adaptive_bed.py`, `kangkung_cv.py`, evaluasi, kalibrasi, GT tool |
 | `raspi/` | Paket **ready-to-use Raspberry Pi**: `install.sh`, `kangkung_pi.py`, `camera_pi.py` (kamera CSI), systemd, thermal guard, Firebase uplink |
 | `web/` | **Dashboard web statis** (live monitoring, tanpa build) — lihat [`web/README.md`](web/README.md) |
-| `notebooks/` | Notebook presentasi (`presentasi_kangkung_cv.ipynb`, tereksekusi) + **naskah presentasi video** (`naskah_presentasi_video.ipynb`, dibuat oleh `notebooks/buat_naskah_presentasi.py`) |
-| `docs/` | Indeks dokumen, laporan progres, skema Firebase `bed_readings`, panduan GT, proposal + slide sempro — lihat [`docs/README.md`](docs/README.md) |
+| `notebooks/` | Notebook presentasi (`presentasi_kangkung_cv.ipynb`, tereksekusi) |
+| `docs/` | Indeks dokumen resmi, manual kalkulasi 8 pilar, slide presentasi, skema Firebase `bed_readings` — lihat [`docs/README.md`](docs/README.md) |
+| `_support/` | Berkas pendukung: draf proposal, berkas bimbingan dosen, SK pembimbing, skrip generator draf & visualisasi — lihat [`_support/README.md`](_support/README.md) |
 | `hardware/` | Desain OpenSCAD box + mounting kamera (`params.scad` = sumber dimensi; STL/renders dibuat ulang via `build.ps1`, tidak di-commit) |
 | `gt/` | Mask ground truth hasil anotasi (`buat_gt.py`) — belum diisi, lihat [`docs/PANDUAN_GT.md`](docs/PANDUAN_GT.md) |
 | `files paper/` | **53 referensi paper** terverifikasi (OpenAlex) dalam markdown |
@@ -94,11 +95,13 @@ tanpa login, troubleshooting, burn-in test 24 jam): lihat
 | Dokumen | Isi |
 |---|---|
 | [`docs/README.md`](docs/README.md) | **Indeks dokumentasi** (mulai dari sini) |
+| [`docs/MANUAL_KALKULASI_FORMULATIF.md`](docs/MANUAL_KALKULASI_FORMULATIF.md) | **Manual kalkulasi formal 8 pilar** (Homografi, Shoelace, WB, ExG, HSV, Morfologi, Skor Panen, PSI, Fuzzy) + paritas numerik & link kode sumber |
+| [`docs/PRESENTASI_FORMULATIF_KALKULATIF_MINIMALIS.pptx`](docs/PRESENTASI_FORMULATIF_KALKULATIF_MINIMALIS.pptx) | **Slide resmi 32 slide**: perhitungan manual vs eksekusi kode |
 | [`docs/SKEMA_FIREBASE_BED_READINGS.md`](docs/SKEMA_FIREBASE_BED_READINGS.md) | Kontrak data `bed_readings` v1.0 untuk dashboard |
 | [`docs/PANDUAN_GT.md`](docs/PANDUAN_GT.md) | Anotasi ground truth (Bab 4) + **checklist deploy Raspberry Pi** |
-| [`docs/LAPORAN_PROGRES_BIMBINGAN.md`](docs/LAPORAN_PROGRES_BIMBINGAN.md) | Laporan progres & timeline bimbingan |
 | [`raspi/README.md`](raspi/README.md) | Deploy Pi, kamera CSI, remote Tailscale, troubleshooting, burn-in |
 | [`web/README.md`](web/README.md) | **Dashboard web live monitoring**: fitur, mode demo, sambung Firebase, hosting |
+| [`_support/README.md`](_support/README.md) | **Berkas pendukung**: draf proposal, materi bimbingan, draf slide, skrip generator |
 | [`gt/README.md`](gt/README.md) | Konvensi nama mask ground truth |
 | [`files paper/REFERENSI_METHOD_BARU.md`](files%20paper/REFERENSI_METHOD_BARU.md) · [`REFERENSI_KESEHATAN_DAUN.md`](files%20paper/REFERENSI_KESEHATAN_DAUN.md) | 53 referensi terverifikasi (OpenAlex) |
 

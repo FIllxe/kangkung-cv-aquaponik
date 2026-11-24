@@ -7,6 +7,7 @@
 """
 
 import cv2
+import math
 import numpy as np
 # Catatan: matplotlib TIDAK di-import di sini. Hanya dipakai untuk
 # visualisasi() (debug/plot di laptop) -> import dilakukan di dalam fungsi
@@ -14,7 +15,8 @@ import numpy as np
 import json
 import os
 import sys
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 
 # Pastikan output terminal UTF-8 (karakter box-drawing & emoji aman di Windows)
 if hasattr(sys.stdout, "reconfigure"):
@@ -64,23 +66,176 @@ KESEHATAN = {
 
 # ─── Indeks stres PSI (Plant Stress Index) ────────────────────────────────────
 # Kontrak ke kontroler fuzzy (rekan tim, Bab 5): skalar 0-100, TINGGI = makin
-# stres. Dinormalkan ke ambang KESEHATAN di atas, dengan alasan:
-#   - PSI = 100  <=>  gejala setara ambang "sakit" (kuning 25% / coklat 8%)
-#   - tidak jenuh: rumus lama (2*kuning + 5*coklat) sudah mentok di 20% coklat
-#     atau 50% kuning, sehingga fuzzy kehilangan gradien di area paling penting
-#   - bobot coklat lebih besar (nekrosis = jaringan mati, tidak dapat dipulihkan)
+# stres. Definisi mengikuti spesifikasi bersama (Rafly, 13 Oktober 2026):
+#
+#   N   = G + Y + B                                  (piksel tanaman terklasifikasi)
+#   PSI = 100 x (0.5*Y + B) / N                      (presisi float64)
+#
+# Bobot kategori: hijau 0, kuning 0,5, coklat 1. Bobot itu HANYA urutan kategori
+# pada indeks — bobot 0,5 TIDAK berarti daun kuning stres fisiologis 50%.
+# Karena linear, rumus ini TIDAK jenuh di tengah rentang: gradien tetap ada
+# sampai 100% piksel cokelat (rumus lama 2*K+5*C sudah mentok di 20% coklat /
+# 50% kuning sehingga fuzzy kehilangan gradien di area paling penting).
+#   - PSI 0   hanya bila SEMUA piksel hijau
+#   - PSI 50  bila semua piksel kuning (campuran lain bisa juga 50)
+#   - PSI 100 hanya bila SEMUA piksel cokelat
+#
+# PSI tinggi TIDAK membuktikan kualitas air sebagai penyebab — tetap dibaca
+# bersama pH dan kekeruhan oleh Sugeno, bukan pemicu tunggal ganti air.
+#
 # CATATAN TERMINOLOGI: "PSI" di proyek ini = Plant Stress Index (istilah tim),
 # BUKAN Photosystem I (fisiologi tumbuhan). Selalu tulis lengkap di laporan.
-PSI_VERSION = "1.0"
-PSI_BOBOT = {"kuning": 0.4, "coklat": 0.6}
+PSI_VERSION = "2.0"
+PSI_BOBOT = {"hijau": 0.0, "kuning": 0.5, "coklat": 1.0}
+
+# Batas kalibrasi validitas pengamatan (disesuaikan dari citra instalasi nyata)
+PSI_MIN_TANAMAN_PX = 2000      # batas minimum piksel tanaman yang teramati
+PSI_MAKS_UNCLASSIFIED = 0.15   # batas proporsi piksel tanaman tak terklasifikasi
 
 
-def hitung_psi(pct_kuning, pct_coklat):
-    """PSI 0-100 dari % klorosis & % nekrosis (tinggi = makin stres)."""
-    k = min(max(float(pct_kuning), 0.0) / KESEHATAN["kuning_sakit"], 1.0)
-    c = min(max(float(pct_coklat), 0.0) / KESEHATAN["coklat_sakit"], 1.0)
-    return round(100.0 * min(1.0, PSI_BOBOT["kuning"] * k +
-                                 PSI_BOBOT["coklat"] * c), 1)
+def _ke_piksel(nilai):
+    """Validasi jumlah piksel: bilangan bulat TIDAK NEGATIF.
+
+    Mengembalikan int, atau None bila bukan angka terbatas, negatif, pecahan,
+    atau boolean. NaN/Infinity juga ditolak (spesifikasi §7: jangan kirim
+    NaN atau Infinity sebagai hasil).
+    """
+    if isinstance(nilai, bool):
+        return None
+    try:
+        f = float(nilai)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(f) or f < 0 or f != int(f):
+        return None
+    return int(f)
+
+
+def hitung_psi(green, yellow, brown):
+    """PSI 0-100 dari JUMLAH PIKSEL MENTAH (hijau, kuning, cokelat).
+
+        N   = G + Y + B
+        PSI = 100 x (0.5*Y + B) / N        (presisi float64)
+
+    Mengembalikan `None` bila N = 0 (tidak ada piksel terklasifikasi) atau
+    masukan tidak sah (negatif, pecahan, non-angka) — JANGAN mengembalikan 0,
+    karena 0 adalah hasil SAH untuk kanopi hijau dan tidak boleh tertukar
+    dengan "tidak ada tanaman".
+
+    Tak ada pembulatan di sini: presisi float64 dijaga sampai tampilan.
+    """
+    g, y, b = _ke_piksel(green), _ke_piksel(yellow), _ke_piksel(brown)
+    if g is None or y is None or b is None:
+        return None
+    n = g + y + b
+    if n <= 0:
+        return None
+    return 100.0 * (PSI_BOBOT["kuning"] * y + PSI_BOBOT["coklat"] * b) / n
+
+
+def hitung_psi_persen(pct_kuning, pct_coklat):
+    """Bentuk persentase PSI = 0,5*Y + B (Y,B dalam 0-100, G+Y+B = 100).
+
+    Setara `hitung_psi()` bila masukan adalah persentase yang sama. Hanya
+    untuk tampilan/penelusuran — perhitungan resmi memakai piksel mentah.
+    """
+    try:
+        y = float(pct_kuning); b = float(pct_coklat)
+    except (TypeError, ValueError):
+        return None
+    if y < 0 or b < 0 or y + b > 100:
+        return None
+    return PSI_BOBOT["kuning"] * y + PSI_BOBOT["coklat"] * b
+
+
+def gabung_psi(daftar_piksel):
+    """PSI global dari gabungan beberapa area (grid 4x6).
+
+    Menerima iterable dict `{"green": int, "yellow": int, "brown": int}`.
+    WAJIB menjumlahkan piksel DULU baru menghitung PSI — rata-rata PSI per
+    area salah karena tiap area punya luas tanaman berbeda (spesifikasi §4).
+    """
+    g = y = b = 0
+    for p in daftar_piksel:
+        pg = _ke_piksel(p.get("green", 0))
+        py = _ke_piksel(p.get("yellow", 0))
+        pb = _ke_piksel(p.get("brown", 0))
+        if pg is None or py is None or pb is None:
+            return None, (None, None, None)
+        g += pg; y += py; b += pb
+    return hitung_psi(g, y, b), (g, y, b)
+
+
+def hasil_psi(green, yellow, brown, *, plant_mask_pixels=0,
+              unclassified_pixels=0, quality_flags=None, frame_id=None,
+              captured_at_ms=None):
+    """Bungkus PSI jadi satu objek kontrak untuk pembaca ESP32/tim fuzzy.
+
+    Kontrak: `psi` numerik 0-100 pada hasil valid, `valid` boolean, `reason`
+    kode alasan, `captured_at_ms` Unix epoch milidetik, `frame_id`.
+    Nilai 0 adalah hasil SAH (kanopi hijau) — dibedakan lewat `reason`.
+    Pada hasil tidak valid `psi` bernilai None supaya pembaca tidak salah pakai.
+    """
+    flags = dict(quality_flags or {})
+    g = _ke_piksel(green)
+    y = _ke_piksel(yellow)
+    b = _ke_piksel(brown)
+    pm = _ke_piksel(plant_mask_pixels) or 0
+    up = _ke_piksel(unclassified_pixels) or 0
+    # Kunci kontrak selalu lengkap di SEMUA jalur kembalian supaya pembaca
+    # tidak perlu memakai .get() untuk setiap field.
+    dasar = {
+        "psi": None,
+        "valid": False,
+        "reason": "ok",
+        "captured_at_ms": _ke_piksel(captured_at_ms),
+        "frame_id": frame_id,
+        "green_pixels": g,
+        "yellow_pixels": y,
+        "brown_pixels": b,
+        "classified_pixels": None if g is None else g + (y or 0) + (b or 0),
+        "plant_mask_pixels": pm,
+        "unclassified_pixels": up,
+        "quality_flags": flags,
+        "formula_version": PSI_VERSION,
+    }
+    if g is None or y is None or b is None:
+        dasar["reason"] = "invalid_counts"
+        return dasar
+
+    # Urutan pemeriksaan mengikuti spesifikasi §7
+    if g < 0 or y < 0 or b < 0:
+        reason = "invalid_counts"
+    elif flags.get("camera_error"):
+        reason = "camera_error"
+    elif flags.get("empty_frame"):
+        reason = "empty_frame"
+    elif flags.get("bad_frame_quality"):
+        reason = "bad_frame_quality"
+    elif flags.get("mask_overlap"):
+        reason = "mask_overlap"
+    elif g + y + b == 0:
+        reason = "no_plant_pixels"
+    elif pm < PSI_MIN_TANAMAN_PX:
+        reason = "insufficient_plant_area"
+    elif pm > 0 and up / pm > PSI_MAKS_UNCLASSIFIED:
+        reason = "excessive_unclassified"
+    else:
+        reason = "ok"
+
+    psi = hitung_psi(g, y, b) if reason == "ok" else None
+    if psi is not None and not (0.0 <= psi <= 100.0):
+        reason, psi = "invalid_psi", None
+
+    dasar["psi"] = psi
+    dasar["reason"] = reason
+    dasar["valid"] = reason == "ok"
+    return dasar
+
+
+def sekarang_ms():
+    """Unix epoch milidetik (UTC) untuk penanda waktu pengambilan frame."""
+    return int(time.time() * 1000)
 
 
 # Ambang batas kesiapan panen (dalam % coverage per zona)
@@ -139,41 +294,177 @@ def get_kesehatan(pct_kuning: float, pct_coklat: float) -> str:
 
 def parameter_adaptif(hsv, base=40.0, ref=128.0):
     """
-    Range HSV per kelas ADAPTIF-ILUMINASI (method 2 proyek).
-    f = mean(V)/ref menggeser S_lo/V_lo & V_hi; Hue TIDAK digeser
-    (identitas warna hijau/kuning/coklat tetap). Nilai statis HSV_KANGKUNG
-    dipakai sebagai seed; pergeseran dibatasi clip agar tidak liar.
-    Rujukan: notebook section 5; Woebbecke (1995); Hameed (2018).
+    Range HSV per kelas ADAPTIF-ILUMINASI (optimasi S & V).
+    - Ambang S_lo memakai persentil ke-15 piksel kandidat hijau (tidak ikut
+      melonjak ketika V tinggi/terik agar daun muda & area glare tidak terpotong).
+    - V_lo diadaptasi halus dan V_hi diperlebar hingga 245-252 untuk memulihkan
+      daun di area terang; Hue tidak digeser.
+    - Kuning & cokelat dipertahankan pada seed statis agar PSI konsisten.
     """
-    V = cv2.split(hsv)[2]
-    f = float(np.clip(V.mean() / ref, 0.6, 1.6))
-    s_lo = int(np.clip(base * f, 20, 120))
-    v_lo = int(np.clip(base * f, 20, 120))
-    v_hi = int(np.clip(200 * f, 150, 255))
+    H, S, V = cv2.split(hsv)
+    f = float(np.clip(V.mean() / ref, 0.55, 1.6))
+
+    kand = (H >= 35) & (H <= 85) & (S >= 22) & (V >= 28)
+    if int(kand.sum()) >= 200:
+        s_p15 = float(np.percentile(S[kand], 15))
+        s_lo = int(np.clip(min(base, max(24.0, s_p15 * 0.85)), 22, 48))
+    else:
+        s_lo = int(np.clip(38.0 * (0.7 + 0.3 * f), 22, 48))
+
+    v_lo = int(np.clip(30.0 * (0.65 + 0.35 * f), 20, 52))
+    v_hi_muda = int(np.clip(225.0 + 20.0 * min(f, 1.2), 215, 250))
+    v_hi_mat = 252
+
     rng = {}
-    for k in HSV_KANGKUNG:
+    for k in ("muda", "mature"):
         lo = HSV_KANGKUNG[k]["lower"].copy()
         hi = HSV_KANGKUNG[k]["upper"].copy()
-        if f >= 1.0:
-            # Terang: naikkan floor + cap V atas (buang glare)
-            lo[1] = max(int(lo[1]), s_lo)
-            lo[2] = max(int(lo[2]), v_lo)
-            hi[2] = min(int(hi[2]), v_hi)
-        else:
-            # Gelap: turunkan floor seed secara proporsional (recover daun
-            # gelap) — tetap konservatif agar media tanam tidak ikut masuk
-            lo[1] = int(lo[1] * (0.5 + 0.5 * f))
-            lo[2] = int(lo[2] * (0.4 + 0.6 * f))
+        lo[1] = max(s_lo, 40) if k == "mature" else s_lo
+        lo[2] = max(v_lo, 35) if k == "mature" else v_lo
+        hi[2] = v_hi_muda if k == "muda" else v_hi_mat
         rng[k] = {"lower": lo, "upper": hi}
-    # Kelas diagnostik (kuning/coklat) TIDAK ikut dilonggarkan — tetap seed
-    # statis agar status kesehatan deterministik (terbukti: pelonggaran
-    # memicu false-positive nekrosis hingga 21/24 zona pada bed sehat).
+
+    # Kelas diagnostik (kuning/coklat) tetap memakai seed statis agar status
+    # kesehatan deterministik (mencegah false-positive nekrosis pada bed sehat).
     for k in ("kuning", "coklat"):
         rng[k] = {"lower": HSV_KANGKUNG[k]["lower"].copy(),
                   "upper": HSV_KANGKUNG[k]["upper"].copy()}
-    rng["info"] = {"f": round(f, 2), "s_lo": s_lo,
-                   "v_lo": v_lo, "v_hi": v_hi}
+    rng["info"] = {
+        "f": round(f, 2),
+        "s_lo": s_lo,
+        "v_lo": v_lo,
+        "v_hi": v_hi_mat,
+        "v_hi_muda": v_hi_muda,
+        "v_mean": round(float(V.mean()), 1),
+        "s_mean": round(float(S.mean()), 1),
+        "clahe": True,
+    }
     return rng
+
+
+def koreksi_wb_hangat(bgr):
+    """Koreksi cast hangat/magenta (AWB webcam) berbasis piksel netral terang.
+
+    Hanya aktif bila sorotan netral (PVC/air terang) benar-benar mengalami bias
+    merah (med_R - med_G >= 6), sehingga foto dengan AWB normal tidak berubah.
+    Tidak menekan kanal G dan menjaga warna daun kuning/cokelat sejati.
+    """
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    s, v = hsv[:, :, 1], hsv[:, :, 2]
+    b, g, r = cv2.split(bgr.astype(np.int16))
+    neu = (s < 42) & (v >= 155) & (v <= 246) & ((g - b) < 40)
+    min_px = max(600, int(0.004 * bgr.shape[0] * bgr.shape[1]))
+    if int(neu.sum()) < min_px:
+        return bgr, (1.0, 1.0, 1.0), False
+
+    med = np.median(bgr[neu].astype(np.float32), axis=0)
+    mb, mg, mr = float(med[0]), float(med[1]), float(med[2])
+    if (mr - mg) < 6.0 or (mr / max(mb, 1.0)) > 1.38:
+        return bgr, (1.0, 1.0, 1.0), False
+
+    target = max(mg, (mb + mr) * 0.5 * 0.96)
+    gains = (
+        float(np.clip(target / max(mb, 1.0), 1.0, 1.15)),
+        float(np.clip(target / max(mg, 1.0), 1.0, 1.08)),
+        float(np.clip(target / max(mr, 1.0), 0.80, 1.0)),
+    )
+    arr = np.array(gains, dtype=np.float32)
+    out = np.clip(bgr.astype(np.float32) * arr[None, None, :], 0, 255).astype(np.uint8)
+    return out, tuple(round(g_val, 3) for g_val in gains), True
+
+
+def segmentasi_hijau_adaptif(bgr, adaptif=True):
+    """Segmentasi mask daun hijau (muda + mature) dengan optimasi WB, CLAHE V, & glare S.
+
+    Menghasilkan dict {mask_muda, mask_mature, mask_hijau, hsv_raw, rng, info}
+    agar KangkungAnalyzer.segment() dan adaptive_bed.mask_tanaman_warna() selalu identik.
+    """
+    if not adaptif:
+        hsv_raw = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        rng = {k: {"lower": HSV_KANGKUNG[k]["lower"].copy(),
+                   "upper": HSV_KANGKUNG[k]["upper"].copy()}
+               for k in HSV_KANGKUNG}
+        info = {"f": 1.0, "s_lo": 40, "v_lo": 40, "v_hi": 255, "clahe": False, "wb_cast": False}
+        mask_muda = cv2.inRange(hsv_raw, rng["muda"]["lower"], rng["muda"]["upper"])
+        mask_mature = cv2.inRange(hsv_raw, rng["mature"]["lower"], rng["mature"]["upper"])
+        mask_raw = cv2.bitwise_or(mask_muda, mask_mature)
+        return {
+            "mask_muda": mask_muda,
+            "mask_mature": mask_mature,
+            "mask_hijau": mask_raw,
+            "hsv_raw": hsv_raw,
+            "rng": rng,
+            "info": info,
+        }
+
+    bgr_work, wb_gains, wb_aktif = koreksi_wb_hangat(bgr)
+    hsv_raw = cv2.cvtColor(bgr_work, cv2.COLOR_BGR2HSV)
+
+    h_raw, s_raw, v_raw = cv2.split(hsv_raw)
+    clahe = cv2.createCLAHE(clipLimit=1.6, tileGridSize=(8, 8))
+    v_clahe = clahe.apply(v_raw)
+    v_opt = np.clip(
+        0.55 * v_clahe.astype(np.float32) + 0.45 * v_raw.astype(np.float32),
+        0, 255
+    ).astype(np.uint8)
+    hsv_opt = cv2.merge([h_raw, s_raw, v_opt])
+
+    rng = parameter_adaptif(hsv_opt)
+    info = rng["info"]
+    info["wb_cast"] = wb_aktif
+    if wb_aktif:
+        info["wb_gains"] = wb_gains
+    s_lo = int(info["s_lo"])
+
+    mask_muda = cv2.inRange(hsv_opt, rng["muda"]["lower"], rng["muda"]["upper"])
+    mask_mature = cv2.inRange(hsv_opt, rng["mature"]["lower"], rng["mature"]["upper"])
+
+    b_ch, g_ch, r_ch = cv2.split(bgr_work.astype(np.int16))
+    exg = 2 * g_ch - r_ch - b_ch
+
+    # Pemulihan daun hijau pada area glare / terang ketika S memudar (< s_lo)
+    glare_leaf = (
+        (
+            ((h_raw >= 37) & (s_raw >= 18)) |
+            ((h_raw >= 36) & (v_raw >= 175) & (s_raw >= 12) & (exg >= 14))
+        ) &
+        (h_raw <= 84) &
+        (s_raw < s_lo) &
+        (v_raw >= 165) & (v_raw <= 252) &
+        (exg >= 12)
+    )
+    if glare_leaf.any():
+        mask_muda[glare_leaf] = 255
+
+    # Pemulihan daun hijau-lime muda dominan klorofil (G > R, H 31..34)
+    # tanpa mengganggu daun kuning klorosis sejati (R >= G / ExG rendah).
+    lime_leaf = (
+        (h_raw >= 31) & (h_raw <= 34) &
+        (s_raw >= max(s_lo, 40)) &
+        (v_raw >= 60) &
+        ((g_ch - r_ch) >= 4) &
+        (exg >= 24)
+    )
+    if lime_leaf.any():
+        mask_muda[lime_leaf] = 255
+
+    # Penjaga anti-false-positive pada pantulan air putih/abu-abu & noise saturasi rendah
+    noise_glare = (v_raw >= 220) & (s_raw < 24) & (exg < 8)
+    noise_low_s = (s_raw < 38) & (exg <= 4)
+    suppress = noise_glare | noise_low_s
+    if suppress.any():
+        mask_muda[suppress] = 0
+        mask_mature[suppress] = 0
+
+    mask_raw = cv2.bitwise_or(mask_muda, mask_mature)
+    return {
+        "mask_muda": mask_muda,
+        "mask_mature": mask_mature,
+        "mask_hijau": mask_raw,
+        "hsv_raw": hsv_raw,
+        "rng": rng,
+        "info": info,
+    }
 
 
 def pixel_to_meter(px, total_px, real_m):
@@ -185,14 +476,17 @@ def pixel_to_meter(px, total_px, real_m):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class KangkungAnalyzer:
-    def __init__(self, source=None):
+    def __init__(self, source=None, frame_id=None):
         """
         source: path file gambar / index kamera (int) / None → buat gambar demo
+        frame_id: identitas unik frame (kontrak PSI). None → dibuat otomatis
+                  dari timestamp saat analyze_grid() dijalankan.
         """
         self.source = source
         self.image_orig = None
         self.image_rgb  = None
         self.h, self.w  = 0, 0
+        self.frame_id = frame_id
 
         # Hasil analisis
         self.mask_muda   = None
@@ -326,23 +620,14 @@ class KangkungAnalyzer:
     # ── Segmentasi HSV ───────────────────────────────────────────────────────
 
     def segment(self, adaptif=True):
-        """Segmentasi HSV — range ADAPTIF (f = mean(V)/128) secara default."""
-        hsv = cv2.cvtColor(self.image_orig, cv2.COLOR_BGR2HSV)
+        """Segmentasi HSV — optimasi S & V adaptif (CLAHE V + glare recovery)."""
+        seg = segmentasi_hijau_adaptif(self.image_orig, adaptif=adaptif)
+        hsv = seg["hsv_raw"]
+        rng = seg["rng"]
+        self.info_adaptif = seg["info"]
 
-        if adaptif:
-            rng = parameter_adaptif(hsv)
-        else:
-            rng = {k: {"lower": HSV_KANGKUNG[k]["lower"],
-                       "upper": HSV_KANGKUNG[k]["upper"]}
-                   for k in HSV_KANGKUNG}
-        self.info_adaptif = rng["info"] if adaptif else {
-            "f": 1.0, "s_lo": 40, "v_lo": 40, "v_hi": 255}
-
-        # Buat mask per kategori (range hasil adaptasi)
-        self.mask_muda   = cv2.inRange(hsv, rng["muda"]["lower"],
-                                       rng["muda"]["upper"])
-        self.mask_mature = cv2.inRange(hsv, rng["mature"]["lower"],
-                                       rng["mature"]["upper"])
+        self.mask_muda = seg["mask_muda"]
+        self.mask_mature = seg["mask_mature"]
         self.mask_kuning = cv2.inRange(hsv, rng["kuning"]["lower"],
                                        rng["kuning"]["upper"])
         self.mask_coklat = cv2.inRange(hsv, rng["coklat"]["lower"],
@@ -353,7 +638,7 @@ class KangkungAnalyzer:
         # mask_tanaman_warna() di adaptive_bed.py).
 
         # Gabung semua tanaman (hijau muda + tua)
-        mask_raw = cv2.bitwise_or(self.mask_muda, self.mask_mature)
+        mask_raw = seg["mask_hijau"]
 
         # ── Post-processing morfologi ──────────────────────────────────────
         kernel3 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
@@ -379,6 +664,8 @@ class KangkungAnalyzer:
         # penting — jangan di-close agar tidak menyatu dengan kanopi hijau)
         self.mask_kuning = cv2.morphologyEx(self.mask_kuning,
                                             cv2.MORPH_OPEN, kernel3)
+        self.mask_kuning = cv2.bitwise_and(self.mask_kuning,
+                                           cv2.bitwise_not(mask_clean))
         self.mask_coklat = cv2.morphologyEx(self.mask_coklat,
                                             cv2.MORPH_OPEN, kernel3)
 
@@ -408,6 +695,10 @@ class KangkungAnalyzer:
 
         self.zone_results = {}
         total_panen = 0
+
+        # frame_id wajib ada untuk kontrak PSI: diisi otomatis bila tidak diberikan
+        if not self.frame_id:
+            self.frame_id = f"{self.source or 'cam'}-{sekarang_ms()}"
 
         for r in range(rows):
             for c in range(cols):
@@ -442,6 +733,23 @@ class KangkungAnalyzer:
                     pct_kng = pct_cok = 0.0
                 kesehatan = get_kesehatan(pct_kng, pct_cok)
 
+                # ── Jumlah piksel mentah untuk PSI (spesifikasi §3) ──────────
+                # Setiap piksel WAJIB masuk tepat satu kategori. Ketiga mask
+                # dibuat saling lepas secara KONSTRUKSI (bukan dikurangi
+                # perkiraan): kuning dikurangi coklat, hijau dikurangi kuning
+                # maupun coklat. Dengan begini G+Y+B selalu = |mask tanaman|,
+                # sehingga unclassified_pixels otomatis 0 dan hasilnya bisa
+                # diperiksa silang oleh pembaca ESP32.
+                kng_bukan_cok = cv2.bitwise_and(kng_zona,
+                                                cv2.bitwise_not(cok_zona))
+                px_kuning = int(kng_bukan_cok.sum()) // 255
+                px_coklat = int(cok_zona.sum()) // 255
+                px_hijau = int(cv2.bitwise_and(
+                    mask_zona, cv2.bitwise_not(
+                        cv2.bitwise_or(kng_zona, cok_zona))).sum()) // 255
+                px_klasifikasi = px_hijau + px_kuning + px_coklat
+                px_unclassified = max(0, tan_px - px_klasifikasi)
+
                 if status in ("siap_panen", "harus_panen"):
                     total_panen += 1
 
@@ -458,6 +766,11 @@ class KangkungAnalyzer:
                     "status":      status,
                     "skor":        round(skor, 1),
                     "luas_m2":     round(m_per_row * m_per_col, 3),
+                    "green_pixels":  px_hijau,
+                    "yellow_pixels": px_kuning,
+                    "brown_pixels":  px_coklat,
+                    "plant_mask_pixels": tan_px,
+                    "unclassified_pixels": px_unclassified,
                 }
 
         # Statistik global
@@ -478,12 +791,29 @@ class KangkungAnalyzer:
         coklat_rata = float(np.mean([z["pct_coklat"]
                                      for z in self.zone_results.values()]))
 
-        # Indeks stres PSI: agregat bed + zona terburuk (agar 1 zona mati
-        # tidak hilang di rata-rata; psi_maks jadi anteseden kedua untuk fuzzy)
-        psi_rata = hitung_psi(kuning_rata, coklat_rata)
-        psi_maks = round(max((hitung_psi(z["pct_kuning"], z["pct_coklat"])
-                              for z in self.zone_results.values()),
-                             default=0.0), 1)
+        # Indeks stres PSI. WAJIB dijumlah per piksel dulu (spesifikasi §4):
+        # rata-rata PSI antar zona salah karena luas tanaman tiap zona beda.
+        # Contoh: zona A 900 px hijau (PSI 0) + zona B 100 px coklat (PSI 100)
+        # → global 10, bukan 50.
+        psi_hasil = hasil_psi(
+            sum(z["green_pixels"] for z in self.zone_results.values()),
+            sum(z["yellow_pixels"] for z in self.zone_results.values()),
+            sum(z["brown_pixels"] for z in self.zone_results.values()),
+            plant_mask_pixels=sum(z["plant_mask_pixels"]
+                                  for z in self.zone_results.values()),
+            unclassified_pixels=sum(z["unclassified_pixels"]
+                                    for z in self.zone_results.values()),
+            captured_at_ms=sekarang_ms(),
+            frame_id=self.frame_id,
+        )
+        psi_rata = round(psi_hasil["psi"], 1) if psi_hasil["psi"] is not None \
+            else None
+        # psi_maks = PSI zona terburuk, dihitung dari piksel zona itu sendiri.
+        # Dikirim terpisah agar 1 zona mati tidak hilang di agregat bed.
+        psi_maks = max((hitung_psi(z["green_pixels"], z["yellow_pixels"],
+                                   z["brown_pixels"]) or 0.0
+                        for z in self.zone_results.values()), default=None)
+        psi_maks = round(psi_maks, 1) if psi_maks is not None else None
 
         self.global_stats = {
             "total_zona":           n_zona,
@@ -503,6 +833,16 @@ class KangkungAnalyzer:
             "psi":                  psi_rata,
             "psi_maks":             psi_maks,
             "psi_versi":            PSI_VERSION,
+            "psi_valid":            psi_hasil["valid"],
+            "psi_reason":           psi_hasil["reason"],
+            "captured_at_ms":       psi_hasil["captured_at_ms"],
+            "frame_id":             self.frame_id,
+            "green_pixels":         psi_hasil["green_pixels"],
+            "yellow_pixels":        psi_hasil["yellow_pixels"],
+            "brown_pixels":         psi_hasil["brown_pixels"],
+            "classified_pixels":    psi_hasil["classified_pixels"],
+            "plant_mask_pixels":    psi_hasil["plant_mask_pixels"],
+            "unclassified_pixels":  psi_hasil["unclassified_pixels"],
             "rekomendasi_kesehatan": self._buat_rekomendasi_kesehatan(
                                         kes_count, kuning_rata, coklat_rata),
             "rekomendasi":          self._buat_rekomendasi(

@@ -376,7 +376,7 @@ tiap siklus baru (setelah `interval_menit`).
 | `camera_live.py` | Preview MJPEG 640×480/2 FPS yang privat melalui Tailscale |
 | `modules/` | Salinan `adaptive_bed.py` + `kangkung_cv.py` dari `files/` di repo |
 | `firebase_uplink.py` | Upload Firestore/Storage + antrean offline (`outbox/` → `outbox/sent/`) |
-| `fuzzy_export.py` | Membangun `fuzzy_input` untuk kontroler fuzzy: %klorosis, %nekrosis, `zona_sakit`, **PSI 0–100** (`psi`, `psi_maks`, `psi_versi`) + `indeks_sehat` legacy |
+| `fuzzy_export.py` | Membangun `fuzzy_input` untuk kontroler fuzzy: jumlah piksel mentah, `zona_sakit`, **PSI 0–100** (`psi`, `psi_maks`, `valid`, `reason`, `psi_versi`, `frame_id`, `captured_at_ms`) + `indeks_sehat` legacy. PSI = `100*(0.5*Y + B)/N` dari piksel mentah, agregasi menjumlahkan piksel dulu |
 | `thermal_guard.py` | Baca suhu SoC; tunda capture saat panas |
 | `install.sh` | Installer: copy paket → venv (`--system-site-packages`) → deps → systemd **user** units |
 | `requirements-pi.txt` | Dependensi pip: `opencv-python-headless`, `numpy`, `firebase-admin` |

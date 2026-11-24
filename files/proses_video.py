@@ -39,33 +39,44 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from adaptive_bed import (deteksi_sudut_bed, pilih_sudut_manual,
+from adaptive_bed import (deteksi_sudut_bed, deteksi_sudut_canny,
+                          deteksi_sudut_hsv, pilih_sudut_manual,
                           CornerSmoother, matriks_warp, warp_bed,
                           analisis_grid, gambar_quad, resize_frame,
                           gambar_grid_dalam_box)
 from kalibrasi_kamera import muat_kalibrasi, KALIBRASI_DEFAULT
 
 
-# ─── DETEKSI ROBUST (multi-threshold + fallback) ─────────────────────────────
+# ─── DETEKSI ROBUST (Canny utama + multi-threshold HSV cadangan) ─────────────
+
+def _skor_quad(pts, w, h):
+    """Skor kualitas geometris quad (hindari kotak menempel tepi/keluar ekstrem)."""
+    xs, ys = pts[:, 0], pts[:, 1]
+    if (xs.min() < -w * 0.12 or ys.min() < -h * 0.10 or
+            xs.max() > w * 1.14 or ys.max() > h * 1.14):
+        return 0.0
+    frac = cv2.contourArea(pts) / float(max(1, w * h))
+    score = min(1.0, frac / 0.85) if frac < 0.93 else max(0.0, (1.0 - frac) * 3.0)
+    touches = (int(xs.min() <= 5) + int(ys.min() <= 5) +
+               int(xs.max() >= w - 5) + int(ys.max() >= h - 5))
+    return float(score * (0.88 ** touches))
+
 
 def detek_sudut_robust(frame, v_his=(110, 130, 150, 170), min_area_ratio=0.12):
-    """Coba beberapa threshold V gelap + validasi area. Return (pts, score)."""
+    """Deteksi 4 sudut bed: utama via Canny Edge, cadangan multi-threshold HSV."""
     h, w = frame.shape[:2]
-    full = w * h
+    pts_c = deteksi_sudut_canny(frame, min_area_ratio=min_area_ratio)
+    if pts_c is not None:
+        sc = _skor_quad(pts_c, w, h)
+        if sc > 0.0:
+            return pts_c, sc
+
     best, best_score = None, 0.0
     for v_hi in v_his:
-        pts = deteksi_sudut_bed(frame, v_hi=v_hi, min_area_ratio=min_area_ratio)
+        pts = deteksi_sudut_hsv(frame, v_hi=v_hi, min_area_ratio=min_area_ratio)
         if pts is None:
             continue
-        area = cv2.contourArea(pts)
-        frac = area / full
-        xs, ys = pts[:, 0], pts[:, 1]
-        if xs.min() < -30 or ys.min() < -30 or xs.max() > w + 30 or ys.max() > h + 30:
-            continue
-        score = min(1.0, frac / 0.85) if frac < 0.93 else (1.0 - frac) * 3.0
-        touches = int(xs.min() <= 5 or ys.min() <= 5 or
-                      xs.max() >= w - 5 or ys.max() >= h - 5)
-        score *= (0.85 ** touches)
+        score = _skor_quad(pts, w, h)
         if score > best_score:
             best, best_score = pts, score
     return best, best_score

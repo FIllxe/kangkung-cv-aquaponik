@@ -1,0 +1,266 @@
+Style mismatches for PROPOSAL_PROTOTIPE_FELIX_ENRIQUE_2305110019.docx:
+  Paragraph snippet: 'Proposal Prototipe'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'diajukan sebagai salah satu sy'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'PROGRAM STUDI TEKNIK KOMPUTER
+'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'Proposal Prototipe'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'diajukan sebagai salah satu sy'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'PROGRAM STUDI TEKNIK KOMPUTER
+'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'PERSETUJUAN PEMBIMBING'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'PERSETUJUAN PEMBIMBING'
+    spacing: doc=None  team=1.15
+  Paragraph snippet: 'telah disetujui untuk diajukan'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'telah disetujui untuk diajukan'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Semarang, 30 September 2026
+Pe'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'Semarang, 30 September 2026
+Pe'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Dr. Anan Nugroho, S.T., M.Eng.'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'Dr. Anan Nugroho, S.T., M.Eng.'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'DAFTAR ISI'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'DAFTAR ISI'
+    spacing: doc=None  team=1.15
+  Paragraph snippet: 'DAFTAR ISTILAH DAN SINGKATAN'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'BAB I
+PENDAHULUAN'
+    font: doc=Times New Roman  team=None
+  Paragraph snippet: 'BAB I
+PENDAHULUAN'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'BAB I
+PENDAHULUAN'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: '	Berdasarkan rumusan masalah y'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: '	Berdasarkan rumusan masalah y'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: '	Berdasarkan rumusan masalah y'
+    first_indent: doc=18.0  team=None
+  Paragraph snippet: 'Bagi Penulis'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Menambah pengetahuan dan keter'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'Menambah pengetahuan dan keter'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Meningkatkan kemampuan dalam m'
+    size: doc=12.0  team=None
+  Paragraph snippet: 'Meningkatkan kemampuan dalam m'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Meningkatkan kemampuan dalam m'
+    size: doc=12.0  team=None
+  Paragraph snippet: 'Meningkatkan kemampuan dalam m'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Universitas Negeri Semara'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Pengelola Akuaponik'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Pengembangan Sistem Akuap'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Menjadi dasar pengembangan sis'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'Menjadi dasar pengembangan sis'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Perkembangan Ilmu Pengeta'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Perkembangan Ilmu Pengeta'
+    first_indent: doc=-28.35  team=-28.9
+  Paragraph snippet: 'Bagi Masyarakat dan Pelaku Bud'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Masyarakat dan Pelaku Bud'
+    first_indent: doc=-28.35  team=-35.45
+  Paragraph snippet: 'Bagi Masyarakat dan Pelaku Bud'
+    left_indent: doc=42.55  team=49.65
+  Paragraph snippet: 'Memberikan gambaran penerapan '
+    size: doc=12.0  team=None
+  Paragraph snippet: 'Memberikan gambaran penerapan '
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'BAB II
+KAJIAN PUSTAKA'
+    font: doc=Times New Roman  team=None
+  Paragraph snippet: 'BAB II
+KAJIAN PUSTAKA'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'BAB II
+KAJIAN PUSTAKA'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'BAB III
+METODE PELAKSANAAN'
+    font: doc=Times New Roman  team=None
+  Paragraph snippet: 'BAB III
+METODE PELAKSANAAN'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'BAB III
+METODE PELAKSANAAN'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'DAFTAR PUSTAKA'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'LAMPIRAN'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'LAMPIRAN'
+    spacing: doc=None  team=1.15
+  Paragraph snippet: 'Riwayat Pendidikan'
+    spacing: doc=None  team=1.15
+  Paragraph snippet: 'Riwayat Pendidikan'
+    left_indent: doc=None  team=18.0
+  Paragraph snippet: 'Lampiran 3: Box Komponen yang '
+    size: doc=14.0  team=12.0
+  Paragraph snippet: 'Lampiran 3: Box Komponen yang '
+    spacing: doc=1.5  team=None
+  Paragraph snippet: 'Lampiran 4: Desain 3D kolam Ec'
+    size: doc=14.0  team=12.0
+  Paragraph snippet: 'Lampiran 4: Desain 3D kolam Ec'
+    spacing: doc=1.5  team=None
+  Paragraph snippet: 'Lampiran 5: SK Pembimbing'
+    size: doc=14.0  team=12.0
+  Paragraph snippet: 'Lampiran 5: SK Pembimbing'
+    spacing: doc=1.5  team=None
+
+Style mismatches for PROPOSAL_PROTOTIPE_FELIX_ENRIQUE_2305110019_TANPA_I.docx:
+  Paragraph snippet: 'Proposal Prototipe'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'diajukan sebagai salah satu sy'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'PROGRAM STUDI TEKNIK KOMPUTER
+'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'Proposal Prototipe'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'diajukan sebagai salah satu sy'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'PROGRAM STUDI TEKNIK KOMPUTER
+'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'PERSETUJUAN PEMBIMBING'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'PERSETUJUAN PEMBIMBING'
+    spacing: doc=None  team=1.15
+  Paragraph snippet: 'telah disetujui untuk diajukan'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'telah disetujui untuk diajukan'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Semarang, 30 September 2026
+Pe'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'Semarang, 30 September 2026
+Pe'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Dr. Anan Nugroho, S.T., M.Eng.'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'Dr. Anan Nugroho, S.T., M.Eng.'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'DAFTAR ISI'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'DAFTAR ISI'
+    spacing: doc=None  team=1.15
+  Paragraph snippet: 'DAFTAR ISTILAH DAN SINGKATAN'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'BAB I
+PENDAHULUAN'
+    font: doc=Times New Roman  team=None
+  Paragraph snippet: 'BAB I
+PENDAHULUAN'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'BAB I
+PENDAHULUAN'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: '	Berdasarkan rumusan masalah y'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: '	Berdasarkan rumusan masalah y'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: '	Berdasarkan rumusan masalah y'
+    first_indent: doc=18.0  team=None
+  Paragraph snippet: 'Bagi Penulis'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Menambah pengetahuan dan keter'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'Menambah pengetahuan dan keter'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Meningkatkan kemampuan dalam m'
+    size: doc=12.0  team=None
+  Paragraph snippet: 'Meningkatkan kemampuan dalam m'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Meningkatkan kemampuan dalam m'
+    size: doc=12.0  team=None
+  Paragraph snippet: 'Meningkatkan kemampuan dalam m'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Universitas Negeri Semara'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Pengelola Akuaponik'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Pengembangan Sistem Akuap'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Menjadi dasar pengembangan sis'
+    font: doc=None  team=Times New Roman
+  Paragraph snippet: 'Menjadi dasar pengembangan sis'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Perkembangan Ilmu Pengeta'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Perkembangan Ilmu Pengeta'
+    first_indent: doc=-28.35  team=-28.9
+  Paragraph snippet: 'Bagi Masyarakat dan Pelaku Bud'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'Bagi Masyarakat dan Pelaku Bud'
+    first_indent: doc=-28.35  team=-35.45
+  Paragraph snippet: 'Bagi Masyarakat dan Pelaku Bud'
+    left_indent: doc=42.55  team=49.65
+  Paragraph snippet: 'Memberikan gambaran penerapan '
+    size: doc=12.0  team=None
+  Paragraph snippet: 'Memberikan gambaran penerapan '
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'BAB II
+KAJIAN PUSTAKA'
+    font: doc=Times New Roman  team=None
+  Paragraph snippet: 'BAB II
+KAJIAN PUSTAKA'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'BAB II
+KAJIAN PUSTAKA'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'BAB III
+METODE PELAKSANAAN'
+    font: doc=Times New Roman  team=None
+  Paragraph snippet: 'BAB III
+METODE PELAKSANAAN'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'BAB III
+METODE PELAKSANAAN'
+    spacing: doc=1.5  team=1.15
+  Paragraph snippet: 'DAFTAR PUSTAKA'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'LAMPIRAN'
+    size: doc=14.0  team=None
+  Paragraph snippet: 'LAMPIRAN'
+    spacing: doc=None  team=1.15
+  Paragraph snippet: 'Riwayat Pendidikan'
+    spacing: doc=None  team=1.15
+  Paragraph snippet: 'Riwayat Pendidikan'
+    left_indent: doc=None  team=18.0
+  Paragraph snippet: 'Lampiran 3: Box Komponen yang '
+    size: doc=14.0  team=12.0
+  Paragraph snippet: 'Lampiran 3: Box Komponen yang '
+    spacing: doc=1.5  team=None
+  Paragraph snippet: 'Lampiran 4: Desain 3D kolam Ec'
+    size: doc=14.0  team=12.0
+  Paragraph snippet: 'Lampiran 4: Desain 3D kolam Ec'
+    spacing: doc=1.5  team=None
+  Paragraph snippet: 'Lampiran 5: SK Pembimbing'
+    size: doc=14.0  team=12.0
+  Paragraph snippet: 'Lampiran 5: SK Pembimbing'
+    spacing: doc=1.5  team=None
+

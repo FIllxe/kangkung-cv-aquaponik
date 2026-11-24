@@ -1,0 +1,9 @@
+TERIMA KASIH. Template biodata berhasil dibuat di:
+- docs/buat_biodata_baru.py (skrip pembuatannya)
+- docs/Biodata_Template_Felix_2305110019.docx (hasil dokumen)
+
+Tabel telah siap diisi oleh penulis dengan:
+1. Data Pribadi: Nama Lengkap, Jenis Kelamin, NIM, Tempat/Tgl Lahir, Email, HP
+2. Riwayat Pendidikan: SD/SMP/SMA dengan kolom Nama Instansi, Jurusan, Tahun Masuk
+
+Semua nilai kosong untuk diisi oleh penulis nanti.

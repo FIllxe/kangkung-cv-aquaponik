@@ -2,105 +2,545 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Monitor Kangkung Live — Dashboard Aquaponik</title>
-  <meta name="description" content="Dashboard live monitoring kesiapan panen kangkung (grid 4x6) dari Raspberry Pi via Firebase.">
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MONITORING KANGKUNG LIVE • Capstone Akuaponik Eco Farm UNNES</title>
+  <meta name="description" content="Dashboard live monitoring kesiapan panen kangkung 24-zona planar HSV, analisis spektrum PSI, dan kurva pertumbuhan multi-siklus di Eco Farm UNNES.">
+  <link rel="icon" type="image/png" href="./logo-aquaponik.png?v=3">
+  <link rel="stylesheet" href="./monitoring.css?v=4.0">
 </head>
-<body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-ico" aria-hidden="true">🌿</span>
-      <div>
-        <h1>Monitor Kangkung Live</h1>
-        <p id="deviceLine" class="muted">memuat identitas perangkat…</p>
-      </div>
+<body class="monitoring-body">
+
+  <!-- ====================================================
+       TOPBAR HEADER BAR (STYLE KONSISTEN DENGAN WEB AQUAPONIK)
+       ==================================================== -->
+  <header class="dash-header">
+    <div class="dash-brand">
+      <a href="./index.html" class="dash-brand" title="Kembali ke Halaman Utama">
+        <div class="dash-brand-icon">
+          <img src="./logo-aquaponik.png?v=3" alt="Logo Capstone Aquaponik" width="34" height="34">
+        </div>
+        <div class="dash-brand-info">
+          <strong>MONITORING KANGKUNG LIVE</strong>
+          <small id="deviceLine">Eco Farm UNNES • Node Raspberry Pi 4 Vision</small>
+        </div>
+      </a>
     </div>
-    <div class="statusbar">
+
+    <!-- LIVE STATUS STRIP -->
+    <div class="dash-status-strip">
+      <div class="status-pill status-online" title="Subsistem Computer Vision RPi 4">
+        <span class="status-dot"></span>
+        <span>RPi 4 Vision: <strong>Aktif</strong></span>
+      </div>
+      <div class="status-pill status-sync" title="Koneksi Firestore">
+        <span class="status-dot"></span>
+        <span>Firestore: <strong>Tersambung</strong></span>
+      </div>
       <span id="connBadge" class="badge badge-wait">MENUNGGU</span>
-      <span id="lastUpdate" class="muted">—</span>
-      <button id="demoBtn" class="btn" type="button">Mode demo</button>
+      <span id="lastUpdate" class="muted" style="font-size: 0.8rem;">—</span>
+      <button id="demoBtn" class="btn-pill-subtle" type="button" style="padding: 3px 10px; font-size: 11px;">Mode Demo</button>
+    </div>
+
+    <!-- HEADER RIGHT NAVIGATION BUTTONS -->
+    <div class="dash-header-right">
+      <span class="live-clock" id="live-clock">--:--:-- WIB</span>
+      <a href="./index.html" class="btn-pill-subtle" title="Kembali ke Beranda Utama">
+        <span>Beranda</span>
+      </a>
+      <a href="./simulasi.html" class="btn-pill-subtle" title="Buka Simulasi 3D Digital Twin">
+        <span>Simulator 3D</span>
+      </a>
+      <a href="./dashboard.html" class="btn-pill-primary" title="Buka Dashboard Pengelola Mutu Air Sugeno">
+        <span>Dashboard Pengelola</span>
+      </a>
     </div>
   </header>
+
+  <!-- PROTOCOL WARNING IF OPENED DIRECTLY VIA FILE:// -->
+  <script>
+    if (window.location.protocol === 'file:') {
+      window.addEventListener('DOMContentLoaded', () => {
+        const n = document.getElementById('notice');
+        if (n) {
+          n.classList.remove('hidden');
+          n.style.display = 'block';
+          n.style.background = '#dc2626';
+          n.style.color = '#fff';
+          n.style.padding = '12px 18px';
+          n.style.borderRadius = '10px';
+          n.innerHTML = '<strong>PERHATIAN:</strong> Halaman dibuka lewat protokol <code>file://</code> sehingga browser memblokir modul Firebase dan Three.js. Silakan buka lewat server lokal: <a href="http://localhost:8080/monitoring.html" style="color:#a7f3d0;text-decoration:underline;font-weight:bold;">http://localhost:8080/monitoring.html</a>';
+        }
+      });
+    }
+  </script>
+
+  <!-- VIEW SWITCHER PILL TABS -->
+  <div class="app-nav-container">
+    <nav class="app-nav" aria-label="Navigasi Tampilan Monitoring">
+      <button class="nav-btn active" data-view="dashboard">
+        <span>Ringkasan Dashboard</span>
+      </button>
+      <button class="nav-btn" data-view="live">
+        <span>Peta 24-Zona &amp; Analisis Live</span>
+      </button>
+      <button class="nav-btn" data-view="growth">
+        <span>Siklus Pertumbuhan (30 Hari)</span>
+      </button>
+    </nav>
+  </div>
 
   <main>
     <p id="notice" class="notice hidden" role="status"></p>
 
-    <section class="cards" aria-label="Ringkasan">
-      <article class="card stat">
-        <h2>Coverage rata-rata</h2>
-        <p class="stat-value"><span id="covRata">–</span><span class="unit">%</span></p>
-        <p class="muted" id="covStd">simpangan baku –</p>
-      </article>
-      <article class="card stat">
-        <h2>Zona siap panen</h2>
-        <p class="stat-value"><span id="zonaSiap">–</span><span class="unit">/ 24</span></p>
-        <p class="muted" id="persenSiap">–% dari total zona</p>
-      </article>
-      <article class="card stat">
-        <h2>Indeks stres (PSI)</h2>
-        <p class="stat-value"><span id="indeksSehat">–</span><span class="unit">/ 100</span></p>
-        <p class="muted">0 = sehat · 100 = stres berat (makin tinggi = makin stres)</p>
-        <p class="muted" id="kesRingkas">kuning –% · coklat –%</p>
-      </article>
-      <article class="card stat">
-        <h2>Suhu Raspberry Pi</h2>
-        <p class="stat-value"><span id="suhuPi">–</span><span class="unit">°C</span></p>
-        <p class="muted" id="suhuNote">ambang thermal guard 75 °C</p>
+    <!-- ====================================================
+         VIEW 1: RINGKASAN DASHBOARD
+         ==================================================== -->
+    <section id="view-dashboard" class="view active">
+      <!-- 4 RINGKASAN KPI CARDS -->
+      <section class="cards" aria-label="Ringkasan Sistem">
+        <article class="card stat">
+          <h2>Status Sistem</h2>
+          <p class="stat-value"><span id="sysStatus" style="color: var(--green-bright);">–</span></p>
+          <p class="muted" id="sysNote">menunggu data…</p>
+        </article>
+        <article class="card stat">
+          <h2>Zona Siap Panen</h2>
+          <p class="stat-value"><span id="dashZonaSiap">–</span><span class="unit">/ 24</span></p>
+          <p class="muted" id="dashPersenSiap">–% dari total zona</p>
+        </article>
+        <article class="card stat">
+          <h2>Indeks Stres (PSI)</h2>
+          <p class="stat-value"><span id="dashPSI">–</span><span class="unit">/ 100</span></p>
+          <p class="muted">makin tinggi = makin stres</p>
+        </article>
+        <article class="card stat">
+          <h2>Suhu Raspberry Pi</h2>
+          <p class="stat-value"><span id="dashSuhu">–</span><span class="unit">°C</span></p>
+          <p class="muted" id="dashSuhuNote">ambang aman 75 °C</p>
+        </article>
+      </section>
+
+      <!-- GRID 2: SNAPSHOT & DISTRIBUSI -->
+      <section class="grid-2">
+        <article class="card">
+          <div class="card-header-flex">
+            <h2>Snapshot Kamera Terakhir</h2>
+            <div class="camera-switch-panel">
+              <button id="dashBtnMonitor" class="switch-btn active" type="button" title="Mode Monitoring AI & Analisis Kangkung">
+                <span class="dot-status dot-green"></span> Monitoring (AI)
+              </button>
+              <button id="dashBtnStream" class="switch-btn" type="button" title="Beralih ke Live Video Kamera">
+                <span class="dot-status dot-amber"></span> Live Video
+              </button>
+              <button id="dashBtnCamSettings" class="btn-icon-setting" type="button" title="Pengaturan IP Kamera (WiFi / Tailscale)">Setup IP</button>
+            </div>
+          </div>
+
+          <div id="dashStreamBadge" class="stream-timer-badge hidden">
+            <span class="status-dot" style="background:#ef4444;box-shadow:0 0 6px #ef4444;display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;"></span> LIVE STREAM
+            <span id="dashStreamTimer" class="stream-timer-countdown">05:00</span>
+            <button id="dashBtnStopStream" class="btn-stop-sm" type="button" title="Kembali ke monitoring">Stop</button>
+          </div>
+
+          <figure class="snap-wrap" id="dashMediaWrap">
+            <img id="dashSnapshot" class="snapshot" src="latest_snapshot.jpg" alt="Snapshot bed kangkung">
+            <img id="dashLiveStream" class="snapshot hidden" alt="Live Stream Kamera">
+            <div id="dashStreamOverlay" class="stream-overlay hidden">
+              <div class="stream-spinner"></div>
+              <p>Menghubungkan ke live stream kamera...</p>
+            </div>
+            <figcaption id="dashSnapshotNote" class="muted" style="padding: 8px 12px; font-size: 0.8rem; background: #050d0c;">Snapshot bed kangkung.</figcaption>
+          </figure>
+        </article>
+
+        <article class="card">
+          <h2>Distribusi Status 24 Zona</h2>
+          <div id="dashDistStatus" class="dist"></div>
+          <div id="dashLegendStatus" class="legend"></div>
+          
+          <h2 style="margin-top: 1.5rem;">Distribusi Kesehatan Daun</h2>
+          <div id="dashDistKes" class="dist"></div>
+          <div id="dashLegendKes" class="legend"></div>
+        </article>
+      </section>
+
+      <!-- REKOMENDASI & INPUT FUZZY -->
+      <article class="card" style="margin-bottom: 16px;">
+        <h2>Rekomendasi Agronomi &amp; Parameter Fuzzy Solenoid/Pompa</h2>
+        <p id="dashRekomen" class="reko">—</p>
+        <div id="dashFuzzy" class="chips"></div>
       </article>
     </section>
 
-    <section class="grid-2">
-      <article class="card">
-        <h2>Peta zona <span class="muted">(baris × kolom = 4 × 6)</span></h2>
-        <div id="heatmap" class="heatmap" role="group" aria-label="Peta 24 zona"></div>
-        <div id="legendStatus" class="legend"></div>
-        <div id="zoneDetail" class="zone-detail" aria-live="polite">
-          Klik salah satu zona untuk melihat detail.
-        </div>
-      </article>
+    <!-- ====================================================
+         VIEW 2: PETA 24-ZONA & ANALISIS LIVE
+         ==================================================== -->
+    <section id="view-live" class="view hidden">
+      <section class="cards" aria-label="Ringkasan">
+        <article class="card stat">
+          <h2>Coverage Rata-rata</h2>
+          <p class="stat-value"><span id="covRata">–</span><span class="unit">%</span></p>
+          <p class="muted" id="covStd">simpangan baku –</p>
+        </article>
+        <article class="card stat">
+          <h2>Zona Siap Panen</h2>
+          <p class="stat-value"><span id="zonaSiap">–</span><span class="unit">/ 24</span></p>
+          <p class="muted" id="persenSiap">–% dari total zona</p>
+        </article>
+        <article class="card stat">
+          <h2>Indeks Stres (PSI)</h2>
+          <p class="stat-value"><span id="indeksSehat">–</span><span class="unit">/ 100</span></p>
+          <p class="muted">0 = sehat · 100 = stres berat</p>
+          <p class="muted" id="kesRingkas">kuning –% · coklat –%</p>
+        </article>
+        <article class="card stat">
+          <h2>Suhu Raspberry Pi</h2>
+          <p class="stat-value"><span id="suhuPi">–</span><span class="unit">°C</span></p>
+          <p class="muted" id="suhuNote">ambang thermal guard 75 °C</p>
+        </article>
+      </section>
 
-      <article class="card">
-        <h2>Snapshot terakhir</h2>
-        <figure class="snap-wrap">
-          <img id="snapshot" class="snapshot hidden" alt="Snapshot beranotasi bed kangkung">
-          <figcaption id="snapshotNote" class="muted">Belum ada snapshot.</figcaption>
-        </figure>
-        <h2>Riwayat coverage <span class="muted">(maks 144 pembacaan terakhir)</span></h2>
+      <section class="grid-2">
+        <!-- PETA 24 ZONA -->
+        <article class="card">
+          <div class="card-header-flex">
+            <h2>Peta Zona Kanopi Planar <span class="muted">(Baris × Kolom = 4 × 6)</span></h2>
+            <button type="button" id="btnExportZonesCsv" class="btn-micro-subtle" title="Unduh data pembacaan 24 zona saat ini dalam format CSV">
+              Unduh CSV 24-Zona
+            </button>
+          </div>
+
+          <!-- MULTI-LAYER CONTROLS (NOMOR 5) -->
+          <div class="layer-control-wrap">
+            <div class="layer-control-header">
+              <span class="sub-label">Pilih Layer Informasi:</span>
+              <span class="muted" id="activeLayerDesc" style="font-size: 0.74rem;">Warna kotak: Kesiapan panen (Coverage %)</span>
+            </div>
+            <div class="layer-tabs" id="layerTabs">
+              <button type="button" class="layer-tab active" data-layer="coverage">Kesiapan Panen (Coverage %)</button>
+              <button type="button" class="layer-tab" data-layer="kesehatan">Kesehatan Daun (Klorosis/Nekrosis)</button>
+              <button type="button" class="layer-tab" data-layer="biomassa">Estimasi Biomassa (Gram/Zona)</button>
+            </div>
+          </div>
+
+          <div id="heatmap" class="heatmap" role="group" aria-label="Peta 24 zona kangkung"></div>
+          <div id="legendStatus" class="legend"></div>
+          <div id="zoneDetail" class="zone-detail" aria-live="polite">
+            Klik salah satu kotak zona untuk melihat detail spektrum HSV &amp; status kesiapan.
+          </div>
+        </article>
+
+        <!-- SNAPSHOT & CHART RIWAYAT -->
+        <article class="card">
+          <div class="card-header-flex">
+            <h2>Snapshot Beranotasi</h2>
+            <div class="camera-switch-panel">
+              <button id="liveBtnMonitor" class="switch-btn active" type="button" title="Mode Monitoring AI & Analisis Kangkung">
+                <span class="dot-status dot-green"></span> Monitoring (AI)
+              </button>
+              <button id="liveBtnStream" class="switch-btn" type="button" title="Beralih ke Live Video Kamera">
+                <span class="dot-status dot-amber"></span> Live Video
+              </button>
+              <button id="liveBtnCamSettings" class="btn-icon-setting" type="button" title="Pengaturan IP Kamera (WiFi / Tailscale)">Setup IP</button>
+            </div>
+          </div>
+
+          <div id="liveStreamBadge" class="stream-timer-badge hidden">
+            <span class="status-dot" style="background:#ef4444;box-shadow:0 0 6px #ef4444;display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;"></span> LIVE STREAM
+            <span id="liveStreamTimer" class="stream-timer-countdown">05:00</span>
+            <button id="liveBtnStopStream" class="btn-stop-sm" type="button" title="Kembali ke monitoring">Stop</button>
+          </div>
+
+          <figure class="snap-wrap" id="liveMediaWrap">
+            <img id="snapshot" class="snapshot" src="latest_snapshot.jpg" alt="Snapshot beranotasi bed kangkung">
+            <img id="liveVideoPlayer" class="snapshot hidden" alt="Live Stream Kamera">
+            <div id="liveStreamOverlay" class="stream-overlay hidden">
+              <div class="stream-spinner"></div>
+              <p>Menghubungkan ke live stream kamera...</p>
+            </div>
+            <figcaption id="snapshotNote" class="muted" style="padding: 8px 12px; font-size: 0.8rem; background: #050d0c;">Snapshot beranotasi bed kangkung.</figcaption>
+          </figure>
+
+          <h2>Riwayat Coverage <span class="muted">(Maks 144 Dokumen Pembacaan Terakhir)</span></h2>
+          <div class="chart-wrap">
+            <canvas id="chart" height="160" aria-label="Grafik riwayat coverage"></canvas>
+            <div id="chartTip" class="chart-tip hidden"></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid-2">
+        <article class="card">
+          <h2>Distribusi Status Zona</h2>
+          <div id="distStatus" class="dist"></div>
+          <h2 style="margin-top: 1.2rem;">Kesehatan Daun</h2>
+          <div id="distKes" class="dist"></div>
+          <div id="legendKes" class="legend"></div>
+        </article>
+
+        <article class="card">
+          <h2>Rekomendasi &amp; Input Fuzzy Pompa</h2>
+          <p id="rekomendasi" class="reko">—</p>
+          <div id="fuzzy" class="chips"></div>
+          <h2 style="margin-top: 1.2rem;">Zona Perlu Perhatian</h2>
+          <ul id="alertList" class="alerts"><li class="muted">Belum ada data.</li></ul>
+        </article>
+      </section>
+    </section>
+
+    <!-- ====================================================
+         VIEW 3: SIKLUS PERTUMBUHAN 30 HARI
+         ==================================================== -->
+    <section id="view-growth" class="view hidden">
+      <!-- Retention Banner -->
+      <aside class="retention-banner">
+        <div class="retention-info">
+          <span class="status-pill status-ready" style="font-weight:700;font-size:11px;">RETENSI</span>
+          <div>
+            <strong>Kebijakan Retensi Multi-Siklus (Maks. 3 Siklus / FIFO):</strong>
+            <p class="muted" style="margin: 2px 0 0;">Menyimpan frame terbaik harian selama 1 siklus panen (30 hari). Sistem menyimpan maksimal <strong>3 siklus terakhir</strong>. Jika siklus ke-4 dimulai, foto dan data siklus tertua otomatis diarsipkan.</p>
+          </div>
+        </div>
+        <div class="retention-badge-group">
+          <span id="retentionStatusBadge" class="badge badge-live">3 / 3 SIKLUS TERSIMPAN</span>
+        </div>
+      </aside>
+
+      <!-- Cycle Selector, Phase Filter & Export Buttons -->
+      <div class="growth-toolbar">
+        <div class="cycle-tabs" id="cycleTabs">
+          <!-- Populated by JS: Siklus 1, Siklus 2, Siklus 3 (Aktif) -->
+        </div>
+        <div class="phase-filters" id="phaseFilters">
+          <button class="filter-btn active" data-phase="all">Semua (H1–30)</button>
+          <button class="filter-btn" data-phase="Benih">Benih (H1–5)</button>
+          <button class="filter-btn" data-phase="Bibit">Bibit (H6–12)</button>
+          <button class="filter-btn" data-phase="Vegetatif">Vegetatif (H13–21)</button>
+          <button class="filter-btn" data-phase="Siap Panen">Siap Panen (H22–30)</button>
+        </div>
+        <div class="growth-action-buttons">
+          <button type="button" id="btnExportCycleCsv" class="btn-pill-subtle" title="Unduh dataset siklus 30 hari dalam format CSV untuk analisis Excel">
+            Unduh Dataset CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Cycle Summary Cards -->
+      <section class="cards" aria-label="Ringkasan Siklus">
+        <article class="card stat">
+          <h2>Status Siklus</h2>
+          <p class="stat-value"><span id="growthCycleStatus">—</span></p>
+          <p class="muted" id="growthCyclePeriod">—</p>
+        </article>
+        <article class="card stat">
+          <h2>Hari Berjalan</h2>
+          <p class="stat-value"><span id="growthDaysCount">—</span><span class="unit">/ 30 Hari</span></p>
+          <p class="muted" id="growthProgressPct">—% siklus terpenuhi</p>
+        </article>
+        <article class="card stat">
+          <h2>Puncak Coverage</h2>
+          <p class="stat-value"><span id="growthMaxCoverage">—</span><span class="unit">%</span></p>
+          <p class="muted" id="growthCovTarget">Target panen: &ge; 80%</p>
+        </article>
+        <article class="card stat">
+          <h2>Rata-rata PSI (Stres)</h2>
+          <p class="stat-value"><span id="growthAvgPSI">—</span><span class="unit">/ 100</span></p>
+          <p class="muted" id="growthPsiStatus">Kondisi tanaman optimal</p>
+        </article>
+        <article class="card stat">
+          <h2>Estimasi Hasil Panen</h2>
+          <p class="stat-value"><span id="growthYield">—</span><span class="unit">kg</span></p>
+          <p class="muted">Kangkung segar per bed</p>
+        </article>
+      </section>
+
+      <!-- Growth Chart -->
+      <article class="card" style="margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+          <h2>Kurva Pertumbuhan &amp; Indeks Stres (Hari 1 s/d 30)</h2>
+          <div class="legend" style="margin: 0;">
+            <span><i style="background: #22c55e;"></i> Coverage (%)</span>
+            <span><i style="background: #ef4444;"></i> PSI / Stres</span>
+            <span><i style="background: rgba(255,255,255,0.4); border-top: 1px dashed #fff;"></i> Ambang Siap Panen (55%)</span>
+          </div>
+        </div>
         <div class="chart-wrap">
-          <canvas id="chart" height="160" aria-label="Grafik riwayat coverage"></canvas>
-          <div id="chartTip" class="chart-tip hidden"></div>
+          <canvas id="growthChart" height="150" aria-label="Grafik kurva pertumbuhan kangkung 30 hari"></canvas>
+          <div id="growthChartTip" class="chart-tip hidden"></div>
+        </div>
+      </article>
+
+      <!-- DUAL-AXIS CROSS-CORRELATION CHART (NOMOR 2) -->
+      <article class="card" style="margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <h2 style="margin: 0;">Analisis Korelasi Silang: Mutu Air Kolam vs Kanopi Kangkung (Dual-Axis)</h2>
+            <p class="muted" style="margin: 2px 0 0;">Korelasi dinamis antara parameter air kolam ESP32 (pH &amp; Kekeruhan) terhadap respons stres kanopi kangkung RPi 4 (PSI &amp; Coverage).</p>
+          </div>
+          <div class="legend" style="margin: 0;">
+            <span><i style="background: #38bdf8;"></i> pH Air (Sumbu Kiri)</span>
+            <span><i style="background: #f59e0b;"></i> Kekeruhan NTU (Sumbu Kiri)</span>
+            <span><i style="background: #22c55e;"></i> Coverage % (Sumbu Kanan)</span>
+            <span><i style="background: #ef4444;"></i> PSI Stres (Sumbu Kanan)</span>
+          </div>
+        </div>
+
+        <div class="chart-wrap">
+          <canvas id="correlationChart" height="170" aria-label="Grafik korelasi mutu air kolam terhadap indeks stres kangkung"></canvas>
+          <div id="correlationChartTip" class="chart-tip hidden"></div>
+        </div>
+
+        <!-- Correlation Statistical Summary Box -->
+        <div class="correlation-stats-grid">
+          <div class="corr-stat-item">
+            <span class="muted">Korelasi Pearson (Kekeruhan &amp; PSI)</span>
+            <strong class="text-warning" id="corrValTurbPsi">+0.68 (Korelasi Positif Sedang-Kuat)</strong>
+          </div>
+          <div class="corr-stat-item">
+            <span class="muted">Waktu Jeda Respon Tanaman (Lag Time)</span>
+            <strong id="corrValLag">~36–48 Jam Pasca Kekeruhan Naik</strong>
+          </div>
+          <div class="corr-stat-item">
+            <span class="muted">Efektivitas Pergantian Air Sugeno</span>
+            <strong class="text-optimal" id="corrValEffect">Reduksi Kekeruhan -62% &amp; Stabilisasi PSI</strong>
+          </div>
+        </div>
+
+        <div class="correlation-insight-note">
+          <strong>Catatan Dinamika Agronomi:</strong>
+          <span id="corrInsightText">Data empiris menunjukkan peningkatan kekeruhan akibat pakan dan metabolit ikan berkorelasi dengan peningkatan indeks klorosis daun pada rentang 2 hari berikutnya. Eksekusi konfirmasi katup pengurasan berhasil mengembalikan kejernihan air dan mencegah nekrosis permanen.</span>
+        </div>
+      </article>
+
+      <!-- Daily Best Frame Timeline -->
+      <article class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <h2 style="margin: 0;">Galeri Frame Terbaik Harian (Acuan Pertumbuhan)</h2>
+            <p class="muted" style="margin: 2px 0 0;">Frame resolusi terbaik per hari (pukul 11:00 WIB / pencahayaan puncak) dari benih hingga siap panen.</p>
+          </div>
+          <span id="growthCountLabel" class="muted">Menampilkan 30 hari</span>
+        </div>
+        <div id="growthTimeline" class="growth-grid">
+          <!-- Cards populated by JS -->
         </div>
       </article>
     </section>
 
-    <section class="grid-2">
-      <article class="card">
-        <h2>Distribusi status zona</h2>
-        <div id="distStatus" class="dist"></div>
-        <h2>Kesehatan daun</h2>
-        <div id="distKes" class="dist"></div>
-        <div id="legendKes" class="legend"></div>
-      </article>
-
-      <article class="card">
-        <h2>Rekomendasi &amp; input fuzzy pompa</h2>
-        <p id="rekomendasi" class="reko">—</p>
-        <div id="fuzzy" class="chips"></div>
-        <h2>Zona perlu perhatian</h2>
-        <ul id="alertList" class="alerts"><li class="muted">Belum ada data.</li></ul>
-      </article>
-    </section>
+    <!-- MODAL PREVIEW DETAIL HARI / FOTO -->
+    <div id="growthModal" class="growth-modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalDayTitle">
+      <div class="growth-modal-backdrop" id="growthModalBackdrop"></div>
+      <div class="growth-modal-content">
+        <button class="growth-modal-close" id="growthModalClose" aria-label="Tutup preview">&times;</button>
+        <div class="growth-modal-body">
+          <div class="growth-modal-img-col">
+            <div class="modal-view-toggle" id="modalViewToggle">
+              <button type="button" id="btnViewAnno" class="toggle-btn active">Grid 4x6 &amp; Anotasi CV</button>
+              <button type="button" id="btnViewRaw" class="toggle-btn">Frame Asli Video</button>
+            </div>
+            <img id="modalImg" src="" alt="Frame terbaik tanaman kangkung" class="growth-modal-img">
+            <p id="modalBestHour" class="muted" style="text-align: center; margin-top: 8px; font-size: 0.82rem;"></p>
+          </div>
+          <div class="growth-modal-info-col">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+              <h2 id="modalDayTitle" style="font-size: 1.2rem; margin: 0;">HARI 01</h2>
+              <span id="modalFaseBadge" class="fase-badge">Benih</span>
+            </div>
+            <p id="modalDate" class="muted" style="margin: 0 0 14px; font-size: 0.85rem;"></p>
+            <div class="modal-stats-grid">
+              <div class="modal-stat-box">
+                <span class="muted">Coverage</span>
+                <strong id="modalCoverage">0.0%</strong>
+              </div>
+              <div class="modal-stat-box">
+                <span class="muted">Status Panen</span>
+                <strong id="modalStatus">—</strong>
+              </div>
+              <div class="modal-stat-box">
+                <span class="muted">Indeks Stres (PSI)</span>
+                <strong id="modalPSI">0.0</strong>
+              </div>
+              <div class="modal-stat-box">
+                <span class="muted">Kesehatan</span>
+                <strong id="modalKesehatan">Sehat</strong>
+              </div>
+              <div class="modal-stat-box">
+                <span class="muted">Zona Siap Panen</span>
+                <strong id="modalReadyZones">0 / 24</strong>
+              </div>
+              <div class="modal-stat-box">
+                <span class="muted">Pencahayaan</span>
+                <strong id="modalScore">Optimal (11:00)</strong>
+              </div>
+            </div>
+            <div style="margin-top: 14px;">
+              <h2 style="font-size: 0.82rem;">Catatan Observasi Agronomi</h2>
+              <p id="modalCatatan" class="reko" style="margin: 0;"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
 
   <footer class="foot">
-    <span class="muted">
-      Data dari Raspberry Pi (push tiap ±10 menit) → Firestore
-      <code>bed_readings</code>. Dashboard ini hanya membaca, tidak mengontrol apa pun.
-    </span>
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+      <span>Data dari Raspberry Pi 4 (push berkala) &rarr; Firestore <code>bed_readings</code>. Terintegrasi penuh dengan platform Capstone Akuaponik Eco Farm UNNES.</span>
+      <span class="muted">&copy; 2026 Teknik Komputer FT UNNES</span>
+    </div>
   </footer>
 
-  <script src="firebase-config.js"></script>
-  <script type="module" src="app.js"></script>
+  <!-- SCRIPTS -->
+  <script src="./firebase-config.js?v=4.0"></script>
+  <script type="module" src="./monitoring.js?v=4.0"></script>
+  <script>
+    // Live Clock WIB
+    function updateClock() {
+      const now = new Date();
+      const clockEl = document.getElementById('live-clock');
+      if (clockEl) {
+        const timeStr = now.toLocaleTimeString('id-ID', { hour12: false });
+        clockEl.textContent = `${timeStr} WIB`;
+      }
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Tab view switcher
+    const navBtns = document.querySelectorAll('.nav-btn');
+    const views = document.querySelectorAll('.view');
+
+    function switchView(viewName) {
+      navBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === viewName);
+      });
+      views.forEach(v => {
+        const isActive = v.id === `view-${viewName}`;
+        v.classList.toggle('active', isActive);
+        v.classList.toggle('hidden', !isActive);
+      });
+      if (viewName === 'growth' && window.onGrowthTabSelected) {
+        window.onGrowthTabSelected();
+      }
+    }
+
+    navBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        window.location.hash = btn.dataset.view;
+        switchView(btn.dataset.view);
+      });
+    });
+
+    const initHash = window.location.hash.replace('#', '');
+    if (['dashboard', 'live', 'growth'].includes(initHash)) {
+      switchView(initHash);
+    }
+    window.addEventListener('hashchange', () => {
+      const h = window.location.hash.replace('#', '');
+      if (['dashboard', 'live', 'growth'].includes(h)) {
+        switchView(h);
+      }
+    });
+  </script>
 </body>
 </html>

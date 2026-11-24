@@ -26,6 +26,22 @@ LEBAR_DEFAULT = 1296      # mode native 4:3 sensor ov5647 (cocok untuk warp bed)
 TINGGI_DEFAULT = 972
 WARMUP_DEFAULT = 2.0      # detik: beri waktu auto-exposure/white-balance stabil
 
+_ROTATE_MAP = {
+    90: cv2.ROTATE_90_CLOCKWISE,
+    180: cv2.ROTATE_180,
+    270: cv2.ROTATE_90_COUNTERCLOCKWISE,
+}
+
+
+def putar_frame(frame, rotate_deg=0):
+    """Putar frame sebesar 0/90/180/270 derajat sesuai orientasi pemasangan kamera."""
+    try:
+        deg = int(rotate_deg or 0) % 360
+    except (TypeError, ValueError):
+        return frame
+    code = _ROTATE_MAP.get(deg)
+    return cv2.rotate(frame, code) if code is not None else frame
+
 
 def _ukuran(cfg):
     """Resolusi capture (lebar, tinggi) dari config.json."""

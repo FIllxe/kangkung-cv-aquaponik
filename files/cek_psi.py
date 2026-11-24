@@ -18,7 +18,7 @@
      Angka inilah yang menjadi PSI, jadi selisih > 0,5 pp = FAIL.
 
   2) TABEL PSI per sumber (laporan pipeline / payload Firebase):
-       PSI baru = 100*min(1, 0.4*min(kuning/25,1) + 0.6*min(coklat/8,1))
+       PSI v2.0 = 100*(0.5*Y + B)/N  dari jumlah piksel mentah
        PSI lama = min(100, 2*kuning + 5*coklat)   -> kolom "jenuh?"
      Kolom "jenuh?" menandai sumber yang sudah mentok di 100 sehingga kontroler
      fuzzy kehilangan gradien di area paling penting.
@@ -35,7 +35,9 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from kangkung_cv import KangkungAnalyzer, BED_CONFIG, KESEHATAN, hitung_psi
+from kangkung_cv import (KangkungAnalyzer, BED_CONFIG, PSI_VERSION,
+                         PSI_BOBOT, hitung_psi, hitung_psi_persen,
+                         hasil_psi, gabung_psi)
 from adaptive_bed import mask_tanaman_warna
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -44,6 +46,131 @@ if hasattr(sys.stdout, "reconfigure"):
 ROOT = Path(__file__).resolve().parent.parent
 DUMMY = ROOT / "output" / "dummy"
 TOLERANSI_PP = 0.5
+TOL_RUMUS = 1e-9          # toleransi absolut unit test rumus (spesifikasi §9)
+
+
+# ─── 1) Unit test rumus PSI (spesifikasi PSI v2.0) ───────────────────────────
+
+# (G, Y, B) -> PSI yang diharapkan — 8 kasus wajib dari spesifikasi §4
+KASUS_PSI = [
+    ((1000, 0, 0),     0.0),
+    ((0, 1000, 0),    50.0),
+    ((0, 0, 1000),   100.0),
+    ((800, 150, 50),  12.5),
+    ((600, 300, 100), 25.0),
+    ((400, 400, 200), 40.0),
+    ((0, 500, 500),   75.0),
+    ((300, 400, 300), 50.0),
+]
+
+
+def uji_rumus() -> bool:
+    """Uji rumus, agregasi, invariansi, dan kontrak validitas. True = lolos."""
+    ok = True
+
+    print("\nUNIT TEST RUMUS PSI  "
+          f"(PSI = 100*(0.5*Y + B)/N, toleransi {TOL_RUMUS:g})")
+    print(f"  {'G':>6}{'Y':>6}{'B':>6}{'N':>7}{'harapan':>10}"
+          f"{'hasil':>12}{'selisih':>12}  status")
+    for (g, y, b), harap in KASUS_PSI:
+        psi = hitung_psi(g, y, b)
+        selisih = abs(psi - harap)
+        lolos = psi is not None and selisih <= TOL_RUMUS
+        ok &= lolos
+        print(f"  {g:>6}{y:>6}{b:>6}{g+y+b:>7}{harap:>10.4f}"
+              f"{psi:>12.6f}{selisih:>12.1e}  {'OK' if lolos else 'FAIL'}")
+
+    # ── N = 0: PSI tidak tersedia, BUKAN 0 ────────────────────────────────
+    cek = [
+        ("N=0 -> None (bukan PSI 0)", hitung_psi(0, 0, 0) is None),
+        ("masukan negatif -> None", hitung_psi(-10, 5, 5) is None),
+        ("masukan pecahan -> None", hitung_psi(10.5, 5, 5) is None),
+        ("masukan non-angka -> None", hitung_psi("x", 5, 5) is None),
+        ("hasil selalu 0-100", all(0.0 <= hitung_psi(*c) <= 100.0
+                                   for c, _ in KASUS_PSI)),
+        # skala: semua jumlah piksel x konstanta -> PSI tak berubah
+        ("invarian skala x7", all(
+            abs(hitung_psi(g * 7, y * 7, b * 7) - harap) <= TOL_RUMUS
+            for (g, y, b), harap in KASUS_PSI)),
+        # gradien linier pada N tetap: 1 px hijau->kuning naik 50/N, dst
+        ("hijau->kuning naik 50/N", abs(
+            hitung_psi(999, 1, 0) - hitung_psi(1000, 0, 0) - 0.05) <= TOL_RUMUS),
+        ("hijau->coklat naik 100/N", abs(
+            hitung_psi(999, 0, 1) - hitung_psi(1000, 0, 0) - 0.1) <= TOL_RUMUS),
+        ("kuning->coklat naik 50/N", abs(
+            hitung_psi(0, 999, 1) - hitung_psi(0, 1000, 0) - 0.05) <= TOL_RUMUS),
+        # bentuk persentase setara bentuk piksel
+        ("paritas piksel vs persentase", abs(
+            hitung_psi(800, 150, 50) -
+            hitung_psi_persen(15.0, 5.0)) <= TOL_RUMUS),
+        ("persentase tak sah -> None", hitung_psi_persen(-1, 0) is None),
+        ("bobot kategori 0 / 0,5 / 1",
+         (PSI_BOBOT["hijau"], PSI_BOBOT["kuning"], PSI_BOBOT["coklat"])
+         == (0.0, 0.5, 1.0)),
+    ]
+
+    # ── Agregasi grid: jumlahkan piksel, JANGAN rata-rata PSI (§4) ─────────
+    psi_grid, (g, y, b) = gabung_psi([
+        {"green": 900, "yellow": 0, "brown": 0},    # PSI zona = 0
+        {"green": 0, "yellow": 0, "brown": 100},    # PSI zona = 100
+    ])
+    cek += [
+        ("agregasi grid = 10 (bukan rata-rata 50)",
+         abs(psi_grid - 10.0) <= TOL_RUMUS),
+        ("grid kosong semua -> None",
+         gabung_psi([{"green": 0, "yellow": 0, "brown": 0}])[0] is None),
+        ("total piksel terhitung benar", (g, y, b) == (900, 0, 100)),
+    ]
+
+    # ── Kontrak validitas ─────────────────────────────────────────────────
+    # Catatan: plant_mask_pixels harus >= PSI_MIN_TANAMAN_PX agar lolos ke
+    # pemeriksaan berikutnya (kecuali kasus yang memang menguji ambang itu).
+    v_ok = hasil_psi(900, 50, 50, plant_mask_pixels=1000,
+                     captured_at_ms=1_760_000_000_000, frame_id="f-001")
+    # varian luas memadai (>= PSI_MIN_TANAMAN_PX) untuk kasus hasil valid
+    v_valid = hasil_psi(9000, 500, 500, plant_mask_pixels=10000,
+                        frame_id="f-006")
+    v_nol = hasil_psi(500, 0, 0, plant_mask_pixels=500, frame_id="f-002")
+    v_kosong = hasil_psi(0, 0, 0, plant_mask_pixels=0, frame_id="f-003")
+    v_kecil = hasil_psi(10, 0, 0, plant_mask_pixels=10, frame_id="f-004")
+    v_uncl = hasil_psi(800, 0, 0, plant_mask_pixels=4000,
+                       unclassified_pixels=3000, frame_id="f-005")
+    cek += [
+        # (0.5*50 + 50)/1000*100 = 7,5  — rasio sama dengan kasus (900,50,50)
+        ("hasil valid: psi + valid + reason ok",
+         v_valid["valid"] and v_valid["reason"] == "ok"
+         and abs(v_valid["psi"] - 7.5) <= TOL_RUMUS),
+        ("invarian skala juga berlaku di kontrak hasil",
+         abs(v_valid["psi"] - hitung_psi(900, 50, 50)) <= TOL_RUMUS),
+        ("luas di bawah ambang walau N > 0 -> tidak valid",
+         not v_ok["valid"] and v_ok["reason"] == "insufficient_plant_area"),
+        ("N=0 -> reason no_plant_pixels, psi None",
+         v_kosong["reason"] == "no_plant_pixels" and v_kosong["psi"] is None),
+        # 500 px hijau masih di bawah ambang minimum area -> tidak valid,
+        # jadi PSI 0 yang SAH diuji dengan luas di atas ambang:
+        ("PSI 0 tetap valid bila luas cukup",
+         hasil_psi(3000, 0, 0, plant_mask_pixels=3000)["psi"] == 0.0),
+        ("luas tanaman kurang -> insufficient_plant_area",
+         v_kecil["reason"] == "insufficient_plant_area"),
+        ("tak terklasifikasi berlebih -> excessive_unclassified",
+         v_uncl["reason"] == "excessive_unclassified"),
+        ("psi None pada hasil tidak valid (bukan 0)",
+         all(r["psi"] is None for r in (v_kosong, v_kecil, v_uncl))),
+        ("NaN/Infinity tidak lolos sebagai psi",
+         all(r["psi"] is None or 0.0 <= r["psi"] <= 100.0
+             for r in (v_valid, v_nol, v_kosong, v_kecil, v_uncl))),
+        ("captured_at_ms & frame_id diteruskan",
+         v_ok["captured_at_ms"] == 1_760_000_000_000
+         and v_ok["frame_id"] == "f-001"),
+    ]
+
+    for nama, lolos in cek:
+        ok &= bool(lolos)
+        print(f"  {'OK  ' if lolos else 'FAIL'} {nama}")
+
+    print(f"  {'LOLOS SEMUA' if ok else 'ADA KEGAGALAN'} — "
+          f"rumus PSI v{PSI_VERSION}")
+    return ok
 
 
 # ─── 1) Paritas antar jalur segmentasi ────────────────────────────────────────
@@ -92,7 +219,7 @@ def cek_paritas(gambar: Path):
 # ─── 2) Tabel PSI per sumber ──────────────────────────────────────────────────
 
 def _ambil(path: Path):
-    """Ambil (kuning, coklat, zona_sakit, label) dari laporan atau payload."""
+    """Ambil (kuning, coklat, zona_sakit, piksel, label) dari laporan/payload."""
     d = json.loads(path.read_text(encoding="utf-8"))
     d = d.get("payload", d)                    # file payload dibungkus "payload"
     g = d.get("global") or d.get("kesehatan") or {}
@@ -104,27 +231,46 @@ def _ambil(path: Path):
     if zs is None:
         zona = d.get("zona", {})
         zs = sum(1 for z in zona.values() if z.get("kesehatan") == "sakit")
-    return kuning, coklat, int(zs), path.stem
+    # Jumlah piksel mentah kalau laporan sudah memuatnya (kangkung_cv v2.0)
+    gy = g.get("green_pixels")
+    yy = g.get("yellow_pixels")
+    bb = g.get("brown_pixels")
+    px = (int(gy), int(yy), int(bb)) if None not in (gy, yy, bb) else None
+    return kuning, coklat, int(zs), px, path.stem
+
+
+def _psi_sumber(kuning, coklat, px):
+    """PSI v2.0 untuk satu sumber: piksel mentah bila ada, jika tidak
+    direkonstruksi dari persentase (Y,B % ; G = 100 - Y - B)."""
+    if px is not None:
+        return hitung_psi(*px)
+    y = max(0.0, min(kuning, 100.0))
+    b = max(0.0, min(coklat, 100.0 - y))
+    return hitung_psi_persen(y, b)
 
 
 def cetak_tabel(sumber):
-    lebar = 88
+    lebar = 96
     print("\n" + "=" * lebar)
-    print(f"{'sumber':<30}{'kuning %':>10}{'coklat %':>10}{'sakit':>7}"
-          f"{'PSI':>8}{'PSI lama':>10}{'jenuh?':>8}")
+    print(f"{'sumber':<28}{'kuning %':>9}{'coklat %':>9}{'sakit':>7}"
+          f"{'PSI v2.0':>10}{'PSI lama':>10}{'jenuh?':>8}{'valid':>8}")
     print("=" * lebar)
-    for kuning, coklat, zs, label in sumber:
-        psi = hitung_psi(kuning, coklat)
+    for kuning, coklat, zs, px, label in sumber:
+        psi = _psi_sumber(kuning, coklat, px)
         lama = min(100.0, kuning * 2.0 + coklat * 5.0)
-        print(f"{label[:29]:<30}{kuning:>10.2f}{coklat:>10.2f}{zs:>7}"
-              f"{psi:>8.1f}{lama:>10.1f}{'YA' if lama >= 100 else '-':>8}")
+        print(f"{label[:27]:<28}{kuning:>9.2f}{coklat:>9.2f}{zs:>7}"
+              f"{(f'{psi:.1f}' if psi is not None else 'n/a'):>10}"
+              f"{lama:>10.1f}{('YA' if lama >= 100 else '-'):>8}"
+              f"{('ya' if psi is not None else 'TIDAK'):>8}")
     print("=" * lebar)
-    print(f"PSI baru = 100*min(1, 0.4*min(kuning/{KESEHATAN['kuning_sakit']:.0f},1)"
-          f" + 0.6*min(coklat/{KESEHATAN['coklat_sakit']:.0f},1))  "
-          f"-> kangkung_cv.hitung_psi()")
+    print(f"PSI v2.0 = 100*(0.5*Y + B)/N dari jumlah piksel mentah "
+          f"(PSI_BOBOT {PSI_BOBOT})")
     print("PSI lama = min(100, 2*kuning + 5*coklat) -> mentok di 20% coklat")
     print("'jenuh? = YA' = rumus lama sudah 100, sehingga fuzzy tidak bisa")
     print("                membedakan 20% vs 80% nekrosis.")
+    print("PSI v2.0 linear: gradien tetap ada sampai 100% piksel coklat.")
+    print("'valid = TIDAK' -> hasil tidak valid, nilai PSI tidak boleh dibaca "
+          "pembaca (bukan PSI 0).")
 
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
@@ -135,11 +281,18 @@ def main():
                     help="gambar untuk uji paritas (default: 2 dummy sakit)")
     ap.add_argument("--laporan", type=Path, nargs="*", default=None,
                     help="laporan/payload JSON untuk tabel PSI")
+    ap.add_argument("--hanya-rumus", action="store_true",
+                    help="jalankan unit test rumus saja (tanpa segmentasi)")
     args = ap.parse_args()
+
+    # Unit test rumus selalu dijalankan lebih dulu — murah dan tanpa dependensi
+    # gambar; kalau gagal, paritas segmentasi tidak perlu dilanjutkan.
+    ok_semua = uji_rumus()
+    if args.hanya_rumus:
+        return 0 if ok_semua else 1
 
     gambar = args.gambar or [DUMMY / "dummy_kuning_30.png",
                              DUMMY / "dummy_coklat_40.png"]
-    ok_semua = True
     for g in gambar:
         g = Path(g)
         if g.exists():

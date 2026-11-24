@@ -91,13 +91,16 @@ try {
     foreach ($m in $Mode) {
         Write-Host "==> Render mode: $m" -ForegroundColor Cyan
         [IO.File]::WriteAllText($wrap, (($body -replace 'mode_ov = "[a-z]+";', "mode_ov = `"$m`";") -join "`n"), $utf8)
-        # PENTING: mode xray memakai --preview (OpenCSG), BUKAN --render
-        # (CGAL). Renderer CGALOutcome mengabaikan nilai alpha dari color(),
-        # jadi dinding semi transparan akan keluar totally solid. OpenCSG
-        # menghormati alpha, dan karena mode xray tidak butuh geometri final,
-        # kualitasnya sudah lebih dari cukup untuk review.
-        $usePreview = ($m -eq "xray")
-        $eng = if ($usePreview) { "--preview=png" } else { "--render" }
+        # PENTING: pakai --preview (OpenCSG), BUKAN --render (CGAL).
+        # Dua alasan:
+        #  1) CGAL di build OpenSCAD Windows ini mengabaikan color() saat
+        #     ekspor PNG - semua part keluar salah warna (DimGray jadi
+        #     teal + interior emas). OpenCSG menghormati color() apa adanya.
+        #  2) Mode xray butuh alpha dari color(); renderer CGAL mengabaikan
+        #     alpha, jadi dinding semi transparan keluar totally solid.
+        # Geometri preview OpenCSG sudah cukup untuk review visual; STL
+        # tetap diekspor penuh lewat CGAL di blok -SkipStl di atas.
+        $eng = "--preview=png"
         foreach ($v in $views) {
             $out = Join-Path $renderDir "preview_${m}_$($v.n).png"
             $camArgs = "0,0,0," + ($v.rot -join ",") + ",0"

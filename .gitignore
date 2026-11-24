@@ -3,12 +3,14 @@ service-account.json
 raspi/service-account.json
 files/service-account.json
 web/firebase-config.js
+*firebase-adminsdk*.json
 kalibrasi_kamera.json
 *.key
 
 # ── Data besar: video mentah & hasil (dibuat ulang / diunduh terpisah) ───────
 data/
 dataset1/
+dataset_ecofarm_frames/
 output/
 videos/
 *.MOV
@@ -35,6 +37,8 @@ venv/
 # ── Sistem ───────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+.vscode/
+*.stackdump
 # File lock sementara Microsoft Office (mis. ~$dokumen.pptx) — jangan di-commit
 ~$*
 
