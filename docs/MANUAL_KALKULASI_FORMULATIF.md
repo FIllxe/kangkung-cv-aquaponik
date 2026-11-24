@@ -23,6 +23,8 @@ Tiga hal yang dibuktikan di sini:
 
 ### 2.1 Transformasi Homografi — Luruskan Gambar Miring Jadi Bird's-Eye View
 
+📄 **Kode**: [`adaptive_bed.py` L548–L554](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/adaptive_bed.py#L548-L554) — fungsi `matriks_warp()` dan `warp_bed()`
+
 Kamera dipasang miring di atas talang. Akibatnya, talang yang sebetulnya persegi panjang kelihatan trapesium di kamera. Homografi adalah transformasi matriks 3×3 yang "meluruskan" kembali gambar itu.
 
 Rumus transformasinya:
@@ -38,6 +40,8 @@ $$x' = \frac{h_{11}x + h_{12}y + h_{13}}{h_{31}x + h_{32}y + 1}, \quad y' = \fra
 ---
 
 ### 2.2 Rumus Shoelace — Hitung Luas Poligon dari Koordinat Titik
+
+📄 **Kode**: [`adaptive_bed.py` L103](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/adaptive_bed.py#L103) — `cv2.contourArea()` menghitung luas dan rasio validasi poligon
 
 Setelah kamera mendeteksi 4 sudut talang, perlu dicek: "Apakah 4 titik ini membentuk area yang masuk akal, bukan noise?" Caranya dengan menghitung luasnya pakai Rumus Shoelace.
 
@@ -75,6 +79,8 @@ Nilai 45,30% ada di dalam batas valid (12%–94%) → poligon **diterima** ✓
 
 ### 2.3 EMA Smoothing — Kurangi Getaran Posisi Sudut
 
+📄 **Kode**: [`adaptive_bed.py` L63–L75](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/adaptive_bed.py#L63-L75) — class `CornerSmoother`, baris kunci `self.pts = self.alpha * pts + (1 - self.alpha) * self.pts`
+
 Pompa air bikin kamera bergetar. Kalau posisi sudut langsung diambil mentah setiap frame, hasilnya goyang. Solusinya: pakai Exponential Moving Average (EMA) — posisi baru dirata-rata dengan posisi sebelumnya.
 
 $$\mathbf{P}_t = \alpha \cdot \mathbf{P}_{\text{deteksi}} + (1 - \alpha) \cdot \mathbf{P}_{t-1} \quad (\alpha = 0{,}20)$$
@@ -86,6 +92,8 @@ $$\mathbf{P}_t = \alpha \cdot \mathbf{P}_{\text{deteksi}} + (1 - \alpha) \cdot \
 ## 3. Bagian 2: Koreksi Warna (White Balance & CLAHE)
 
 ### 3.1 Koreksi White Balance — Netralkan Warna Merah dari Cahaya Matahari
+
+📄 **Kode**: [`kangkung_cv.py` L345–L373](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/kangkung_cv.py#L345-L373) — fungsi `koreksi_wb_hangat()`
 
 Webcam di luar ruangan sering menghasilkan gambar kemerahan/magenta saat terkena sinar matahari terik. Ini harus dikoreksi sebelum analisis warna daun.
 
@@ -109,6 +117,8 @@ $$\text{Gain}_B = \text{clamp}\left( \frac{\text{Target}}{m_B},\; 1{,}00,\; 1{,}
 
 ### 3.2 CLAHE Blending — Angkat Detail di Area Gelap
 
+📄 **Kode**: [`kangkung_cv.py` L404–L409](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/kangkung_cv.py#L404-L409) — `cv2.createCLAHE()` + blending `0.55 * v_clahe + 0.45 * v_raw`
+
 CLAHE (Contrast Limited Adaptive Histogram Equalization) meningkatkan kontras lokal. Tapi kalau dipakai 100%, area terang jadi overexposed. Solusi: blending 55% CLAHE + 45% gambar asli.
 
 $$V_{\text{opt}} = \lfloor 0{,}55 \cdot V_{\text{CLAHE}} + 0{,}45 \cdot V_{\text{raw}} \rceil$$
@@ -118,6 +128,8 @@ $$V_{\text{opt}} = \lfloor 0{,}55 \cdot V_{\text{CLAHE}} + 0{,}45 \cdot V_{\text
 ## 4. Bagian 3: Excess Green Index (ExG) — Pisahkan Daun dari Air
 
 ### 4.1 Kenapa Perlu ExG?
+
+📄 **Kode**: [`kangkung_cv.py` L423–L434](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/kangkung_cv.py#L423-L434) — `exg = 2 * g_ch - r_ch - b_ch`, threshold `exg >= 14`
 
 Permukaan air di talang memantulkan cahaya dan kelihatan putih/abu terang di kamera. Warnanya bisa mirip daun muda. ExG adalah cara matematis untuk membedakan keduanya berdasarkan seberapa "hijau" suatu piksel.
 
@@ -153,6 +165,8 @@ Threshold warna daun yang fix (misalnya selalu `H: 35–85, S: 38–255`) tidak 
 
 ### 5.2 Rumus Adaptive Factor & Threshold
 
+📄 **Kode**: [`kangkung_cv.py` L295–L342](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/kangkung_cv.py#L295-L342) — fungsi `parameter_adaptif()`, baris kunci: `f = float(np.clip(V.mean() / ref, 0.55, 1.6))`, `v_lo = int(np.clip(30.0 * (0.65 + 0.35 * f), 20, 52))`
+
 **Langkah 1 — Hitung faktor pencahayaan f dari rata-rata kecerahan frame ($\overline{V}$):**
 
 $$f = \max\left( 0{,}55,\; \min\left( \frac{\overline{V}}{128{,}0},\; 1{,}60 \right) \right)$$
@@ -184,6 +198,8 @@ $$f = \frac{180{,}0}{128{,}0} = 1{,}40625 \implies S_{lo} = \lfloor 38 \times 1{
 ---
 
 ## 6. Bagian 5: Morfologi — Saring Daun Cokelat yang Palsu
+
+📄 **Kode**: [`kangkung_cv.py` L636–L670](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/kangkung_cv.py#L636-L670) — dilasi `cv2.dilate(..., (21,21))`, adjacency gate `cv2.bitwise_and(mask_coklat, adj)`, opening `cv2.MORPH_OPEN`
 
 Masalah: warna cokelat media tanam (arang sekam, netpot plastik) sama persis dengan warna daun cokelat/nekrosis di HSV. Kalau langsung dideteksi, banyak false alarm.
 
@@ -223,11 +239,15 @@ Talang fisik berukuran 2,0 m × 1,1 m, dibagi menjadi grid 4×6 = 24 petak.
 
 ### 7.2 Coverage — Persentase Area Tertutup Tanaman
 
+📄 **Kode**: [`adaptive_bed.py` L615–L640](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/adaptive_bed.py#L615-L640) — fungsi `analisis_grid()`, baris kunci: `cov = zona.sum() / 255 / zona.size * 100`
+
 $$\text{Coverage}_i = \frac{N_{\text{tanaman}, i}}{N_{\text{total}, i}} \times 100\%$$
 
 ---
 
 ### 7.3 Skor Panen — Fungsi Piecewise 3 Fase
+
+📄 **Kode**: [`kangkung_cv.py` L268–L277](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/kangkung_cv.py#L268-L277) — fungsi `coverage_to_score()`
 
 Skor panen tidak linear — terlalu rapat (over-dense) justru diberi penalti karena tanaman saling berebut cahaya.
 
@@ -256,6 +276,8 @@ $$\text{Skor} = 100{,}0 - (90{,}0 - 80{,}0) \times 1{,}5 = 100{,}0 - 15{,}0 = \m
 ## 8. Bagian 7: Plant Stress Index (PSI) — Seberapa Sakit Tanamannya?
 
 ### 8.1 Rumus PSI
+
+📄 **Kode**: [`kangkung_cv.py` L67–L92](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/kangkung_cv.py#L67-L92) — definisi rumus `PSI = 100 x (0.5*Y + B) / N`
 
 PSI menghitung "beban stres" dari komposisi warna daun. Daun hijau = sehat, kuning = mulai sakit, cokelat = sudah mati.
 
@@ -289,6 +311,8 @@ $$\text{PSI} = 100 \times \frac{0{,}5(3.000) + 1{,}0(5.000)}{10.000} = 100 \time
 
 ### 8.2 PSI Global dari 24 Petak — Dihitung Sekaligus, Bukan Rata-Rata Rata-Rata
 
+📄 **Kode**: [`kangkung_cv.py` L794–L810](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/modules/kangkung_cv.py#L794-L810) — `hasil_psi(sum(green), sum(yellow), sum(brown))` — semua piksel dijumlah dulu baru dihitung PSI-nya
+
 Kalau PSI tiap petak langsung dirata-rata, hasilnya bisa salah (Simpson's Paradox). Caranya yang benar: jumlahkan semua piksel dulu, baru hitung PSI-nya satu kali.
 
 $$\text{PSI}_{\text{global}} = 100 \times \frac{0{,}5 \sum_{i=1}^{24} Y_i + 1{,}0 \sum_{i=1}^{24} B_i}{\sum_{i=1}^{24} (G_i + Y_i + B_i)}$$
@@ -317,6 +341,8 @@ Ini adalah bagian yang dikerjakan oleh sensor ESP32 (Rafly). Sistem Computer Vis
 ---
 
 ### 9.2 Defuzzifikasi — Hitung Volume Akhir
+
+📄 **Kode**: [`fuzzy_export.py` L80–L99](https://github.com/FIllxe/kangkung-cv-aquaponik/blob/main/raspi/fuzzy_export.py#L80-L99) — fungsi `hitung_fuzzy()`, agregasi PSI dari semua zona lalu dikirim ke kontroler ESP32
 
 $$Z^* = \frac{\sum_{k=1}^M w_k \cdot Z_k}{\sum_{k=1}^M w_k}, \quad V_{\text{kuras}} = \left(\frac{Z^*}{100}\right) \times 2500\ \text{Liter}$$
 
